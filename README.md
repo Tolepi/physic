@@ -105,4 +105,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-*made with ❤️, terminal aesthetics, and questionable life choices*
+*made with ❤️, terminal aesthetics, and questionable life choices. I want the Bodypop vinyl please someone buy it for me.*
