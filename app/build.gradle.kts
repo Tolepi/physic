@@ -13,7 +13,15 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    signingConfigs {
+        create("release") {
+            storeFile = file("../physic.keystore")
+            storePassword = "physic123"
+            keyAlias = "physic"
+            keyPassword = "physic123"
+        }
+    }
+    buildTypes { release { isMinifyEnabled = false; signingConfig = signingConfigs.getByName("release") } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
