@@ -1,11 +1,7 @@
 # Physic
 
 ```
-_   _  ___  ____  __  __ ______ ___  ____
-| | | |/ _ \/ ___|| | | |_   _/ __ \/ ___|
-| |_| | | | \___ \| |_| | | || |  | \___ \
-|  _  | |_| |___) |  _  | | || |__| |___) |
-|_| |_|\___/|____/|_| |_| |_| \____/|____/
+First TW: I dont know what i just did.
 ```
 
 A local-first Android music player with a TUI soul.
@@ -24,7 +20,9 @@ A local-first Android music player with a TUI soul.
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Vibecoded](https://img.shields.io/badge/Development-100%25_Vibecoded-ff69b4?style=for-the-badge)](https://en.wikipedia.org/wiki/Vibe_coding)
 
-> screenshots go here (add yours!)
+> screenshot or something
+<img width="286" height="640" alt="Screenshot_2026-10-02-15-39-36-11_ced7f87d148198a9a5d73debfbcaaa47" src="https://github.com/user-attachments/assets/66d62519-04a4-4dbc-98ae-5488660fc0d0" />
+
 
 ---
 
