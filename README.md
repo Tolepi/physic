@@ -29,8 +29,7 @@ A local-first Android music player with a TUI soul.
 ## What is this
 
 Physic is a small but fully-featured music player that tries to look like a
-terminal (in the style of [system24](https://refact0r.github.io/system24/) (even though it doesnt look like it) for
-Discord) while actually being a ~~competent~~ STUPIDLY HORRIBLE local music player.
+terminal in the style of [system24](https://refact0r.github.io/system24/) (even though it doesnt look like it) while actually being a ~~competent~~ STUPIDLY HORRIBLE local music player.
 
 Think Namida + Retro Music + Spotify-home, wearing a trench coat made of ASCII.
 
