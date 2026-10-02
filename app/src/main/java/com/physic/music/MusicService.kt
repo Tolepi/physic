@@ -63,8 +63,6 @@ class MusicService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
 
-    override fun onTaskRemoved(rootIntent: Intent?) { stopSelf() }
-
     override fun onDestroy() {
         session?.run { player.release(); release() }
         Playback.player = null

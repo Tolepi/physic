@@ -16,6 +16,7 @@ data class Song(
     val durationMs: Long,
     val dateAdded: Long = 0,
     val year: String = "",
+    val track: Int = 0,
 )
 
 object MusicIndex {
@@ -54,6 +55,7 @@ object MusicIndex {
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.TRACK,
         )
         c.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols,
@@ -70,7 +72,8 @@ object MusicIndex {
                     Song(
                         id, cur.getString(1) ?: "?", cur.getString(2) ?: "?",
                         cur.getString(3) ?: "?", cur.getLong(7), uri, cur.getString(4) ?: "", cur.getLong(5),
-                        cur.getLong(8), (cur.getLong(9)).let { if (it in 1L..9999L) it.toString() else "" }
+                        cur.getLong(8), (cur.getLong(9)).let { if (it in 1L..9999L) it.toString() else "" },
+                        cur.getInt(10)
                     )
                 )
             }

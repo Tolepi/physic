@@ -24,6 +24,7 @@ object Prefs {
     private val PROFILE_NAME = stringPreferencesKey("profile_name")
     private val PROFILE_PIC = stringPreferencesKey("profile_pic")
     private val FONT_NAME = stringPreferencesKey("font_name")
+    private val ONBOARDED = booleanPreferencesKey("onboarded")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -37,6 +38,8 @@ object Prefs {
     fun profileName(c: Context) = c.ds.data.map { it[PROFILE_NAME] ?: "listener" }
     fun profilePic(c: Context) = c.ds.data.map { it[PROFILE_PIC] ?: "" }
     fun fontName(c: Context) = c.ds.data.map { it[FONT_NAME] ?: "DM Mono" }
+    fun onboarded(c: Context) = c.ds.data.map { it[ONBOARDED] ?: false }
+    suspend fun setOnboarded(c: Context, v: Boolean) = c.ds.edit { it[ONBOARDED] = v }
     suspend fun setWelcome(c: Context, v: String) = c.ds.edit { it[WELCOME] = v }
     suspend fun setProfileName(c: Context, v: String) = c.ds.edit { it[PROFILE_NAME] = v }
     suspend fun setProfilePic(c: Context, v: String) = c.ds.edit { it[PROFILE_PIC] = v }
