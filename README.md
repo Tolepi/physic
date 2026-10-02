@@ -1,7 +1,7 @@
 # Physic
 
 ```
-First TW: I dont know what i just did.
+The only tester for this app is my girlfriend. Shoutout to her. I love you.
 ```
 
 A local-first Android music player with a TUI soul.
@@ -31,12 +31,12 @@ A local-first Android music player with a TUI soul.
 Physic is a small but fully-featured music player that tries to look like a
 terminal in the style of [system24](https://refact0r.github.io/system24/) (even though it doesnt look like it) while actually being a ~~competent~~ STUPIDLY HORRIBLE local music player.
 
-Think Namida + Retro Music + Spotify-home, wearing a trench coat made of ASCII.
+Think Namida + Retro Music + Spotify-home, wearing a trench coat made of ASCII. Even though it has no fucking correlation.
 
 ## Features
 
 ### Playback
-- Full Media3/ExoPlayer pipeline with lockscreen + notification controls
+- Full Media3/ExoPlayer pipeline
 - Shuffle & repeat (off / all / one)
 - Seekbar, prev / play-pause / next
 - Home-screen widget with play/pause + next
@@ -58,7 +58,7 @@ Think Namida + Retro Music + Spotify-home, wearing a trench coat made of ASCII.
 ### Stats (`~/stats`)
 - Total plays, most played songs, top albums, top artists
 - Tap a card to see the full ranked list
-- JSON stats import (Namida-style) so you never lose your history
+- JSON stats import (please use it i dont know if it works) so you never lose your history
 
 ### Audio
 - Real system equalizer with per-band sliders (`~/eq`)
