@@ -15,10 +15,10 @@ android {
     }
     signingConfigs {
         create("release") {
-            storeFile = file("../physic.keystore")
-            storePassword = "physic123"
-            keyAlias = "physic"
-            keyPassword = "physic123"
+            storeFile = File(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
     }
     buildTypes { release { isMinifyEnabled = false; signingConfig = signingConfigs.getByName("release") } }

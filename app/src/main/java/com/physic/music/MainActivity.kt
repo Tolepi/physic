@@ -738,6 +738,12 @@ fun SettingsTab(
                 }
             }
         }
+
+        Panel("about", theme, shape = RoundedCornerShape(0.dp)) {
+            Text("physic v1.2", color = theme.text, fontSize = 13.sp)
+            Text("github.com/Tolepi/physic", color = theme.accent, fontSize = 12.sp)
+            Text("vibecoded with love", color = theme.subtext, fontSize = 11.sp)
+        }
     }
 }
 
