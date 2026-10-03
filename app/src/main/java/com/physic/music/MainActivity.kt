@@ -251,7 +251,7 @@ fun LyricsBlock(theme: ThemeColors, posMs: Float) {
         modifier = Modifier.clickable { showLyrics = !showLyrics })
     if (showLyrics) {
         if (doc.isEmpty()) {
-            Text("no .lrc sidecar found for this song", color = theme.subtext, fontSize = 12.sp)
+            Text(L.tr("no .lrc sidecar found for this song"), color = theme.subtext, fontSize = 12.sp)
         } else {
             val idx = doc.indexOfLast { it.first <= pos }.coerceAtLeast(0)
             Column(Modifier.height(180.dp).verticalScroll(rememberScrollState())) {
@@ -272,7 +272,7 @@ fun LyricsBlock(theme: ThemeColors, posMs: Float) {
 @Composable
 fun Panel(title: String, theme: ThemeColors, modifier: Modifier = Modifier, shape: RoundedCornerShape, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.border(1.dp, theme.border, shape).background(theme.surface, shape).padding(12.dp)) {
-        Text(title.uppercase(), color = theme.subtext, fontSize = 11.sp, letterSpacing = 2.sp)
+        Text(L.tr(title).uppercase(), color = theme.subtext, fontSize = 11.sp, letterSpacing = 2.sp)
         Spacer(Modifier.height(8.dp))
         content()
     }
@@ -313,9 +313,9 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(profileName, color = theme.text, fontSize = 15.sp, modifier = Modifier.clickable { editName = true })
-                    Text("tap to edit", color = theme.subtext, fontSize = 10.sp)
+                    Text(L.tr("tap to edit"), color = theme.subtext, fontSize = 10.sp)
                 }
-                Text("[set pfp]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickPfp.launch("image/*") })
+                Text(L.tr("[set pfp]"), color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickPfp.launch("image/*") })
             }
         }
 
@@ -324,7 +324,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         }
 
         Panel("most played", theme, shape = shape) {
-            if (topSongList.isEmpty()) Text("no plays yet", color = theme.subtext, fontSize = 13.sp)
+            if (topSongList.isEmpty()) Text(L.tr("no plays yet"), color = theme.subtext, fontSize = 13.sp)
             topSongList.take(5).forEachIndexed { i, s ->
                 Row(Modifier.fillMaxWidth().clickable { Playback.play(c, topSongList, i) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(34.dp))
@@ -360,22 +360,22 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
 
         Button(onClick = { if (songs.isNotEmpty()) Playback.play(c, songs.shuffled(), 0) },
             colors = ButtonDefaults.buttonColors(containerColor = theme.accent), shape = shape) {
-            Text("[ shuffle all ]", color = theme.bg)
+            Text(L.tr("[ shuffle all ]"), color = theme.bg)
         }
         Spacer(Modifier.height(6.dp))
     }
 
     if (editWelcome) AlertDialog(
         onDismissRequest = { editWelcome = false },
-        title = { Text("edit welcome") },
+        title = { Text(L.tr("edit welcome")) },
         text = { OutlinedTextField(value = welcomeField, onValueChange = { welcomeField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setWelcome(c, welcomeField); editWelcome = false } }) { Text("ok") } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setWelcome(c, welcomeField); editWelcome = false } }) { Text(L.tr("ok")) } }
     )
     if (editName) AlertDialog(
         onDismissRequest = { editName = false },
-        title = { Text("edit name") },
+        title = { Text(L.tr("edit name")) },
         text = { OutlinedTextField(value = nameField, onValueChange = { nameField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileName(c, nameField); editName = false } }) { Text("ok") } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileName(c, nameField); editName = false } }) { Text(L.tr("ok")) } }
     )
 }
 
@@ -394,14 +394,14 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
                     Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
                 }
                 Text(formatTime(s.durationMs), color = theme.subtext, fontSize = 11.sp)
-                Text(" +", color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { addSong = s }.padding(start = 8.dp))
+                Text(L.tr(" +"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { addSong = s }.padding(start = 8.dp))
             }
         }
     }
     addSong?.let { song ->
         AlertDialog(
             onDismissRequest = { addSong = null },
-            title = { Text("add to playlist") },
+            title = { Text(L.tr("add to playlist")) },
             text = {
                 Column {
                     Playlists.names(c).forEach { name ->
@@ -410,12 +410,12 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
                         }.padding(vertical = 6.dp), color = theme.text)
                     }
                     var newPlaylistName by remember { mutableStateOf("") }
-                    OutlinedTextField(value = newPlaylistName, onValueChange = { newPlaylistName = it }, label = { Text("new playlist") })
+                    OutlinedTextField(value = newPlaylistName, onValueChange = { newPlaylistName = it }, label = { Text(L.tr("new playlist")) })
                     Button(onClick = {
                         if (newPlaylistName.isNotBlank()) {
                             Playlists.create(c, newPlaylistName); Playlists.add(c, newPlaylistName, song.path); addSong = null
                         }
-                    }) { Text("create and add") }
+                    }) { Text(L.tr("create and add")) }
                 }
             },
             confirmButton = {}
@@ -482,7 +482,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                 }
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("← back", color = theme.accent, modifier = Modifier.clickable { selectedArtist = null }.padding(bottom = 8.dp))
+                Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { selectedArtist = null }.padding(bottom = 8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val imgModel: Any = if (customImg.isEmpty()) albumArtUri(list.first()) else customImg
                     AsyncImage(model = imgModel,
@@ -540,7 +540,7 @@ fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: 
         }
     }
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text("← back", color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
+        Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (coverModel != null) {
                 AsyncImage(model = coverModel, contentDescription = null, modifier = Modifier.size(72.dp))
@@ -596,17 +596,17 @@ fun StatsTab(theme: ThemeColors) {
             Panel("total plays: $total", theme, shape = RoundedCornerShape(0.dp)) {
                 top.let {
                     if (it.isNotEmpty()) Text("top: ${it.first().first.substringAfterLast('/')}", color = theme.text, fontSize = 13.sp)
-                    else Text("nothing yet — play something!", color = theme.subtext, fontSize = 12.sp)
+                    else Text(L.tr("nothing yet — play something!"), color = theme.subtext, fontSize = 12.sp)
                 }
             }
             StatCard("most played songs", top.take(5).map { it.first.substringAfterLast('/') to it.second }, theme) { fullView = "songs" }
             StatCard("top albums", albums.take(5), theme) { fullView = "albums" }
             StatCard("top artists", topArtists.take(5), theme) { fullView = "artists" }
-            Text("[import stats json]", color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
+            Text(L.tr("[import stats json]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
             if (showImport) {
-                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text("paste json") },
+                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr("paste json")) },
                     modifier = Modifier.fillMaxWidth().height(160.dp))
-                Button(onClick = { Stats.importJson(c, importText); showImport = false }) { Text("import") }
+                Button(onClick = { Stats.importJson(c, importText); showImport = false }) { Text(L.tr("import")) }
             }
         }
     }
@@ -615,24 +615,24 @@ fun StatsTab(theme: ThemeColors) {
 @Composable
 fun StatCard(title: String, items: List<Pair<String, Int>>, theme: ThemeColors, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().border(1.dp, theme.border).background(theme.surface).clickable { onClick() }.padding(12.dp)) {
-        Text(title.uppercase(), color = theme.accent, fontSize = 13.sp)
+        Text(L.tr(title).uppercase(), color = theme.accent, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
-        if (items.isEmpty()) Text("no data", color = theme.subtext, fontSize = 12.sp)
+        if (items.isEmpty()) Text(L.tr("no data"), color = theme.subtext, fontSize = 12.sp)
         items.forEachIndexed { i, (name, count) ->
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                 Text("${i + 1}. $name", color = theme.text, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("$count", color = theme.subtext, fontSize = 12.sp)
             }
         }
-        Text("tap for full list →", color = theme.subtext, fontSize = 10.sp)
+        Text(L.tr("tap for full list →"), color = theme.subtext, fontSize = 10.sp)
     }
 }
 
 @Composable
 fun FullListView(title: String, items: List<Pair<String, Int>>, theme: ThemeColors, onBack: () -> Unit) {
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text("← back", color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
-        Text(title.uppercase(), color = theme.text, fontSize = 16.sp)
+        Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
+        Text(L.tr(title).uppercase(), color = theme.text, fontSize = 16.sp)
         Spacer(Modifier.height(8.dp))
         items.forEachIndexed { i, (name, count) ->
             Row(Modifier.fillMaxWidth().border(1.dp, theme.border).padding(10.dp)) {
@@ -675,10 +675,10 @@ fun SettingsTab(
                 }
             }
             if (themeName == "Custom") {
-                OutlinedTextField(value = customBg, onValueChange = { customBg = it }, label = { Text("bg #hex") })
-                OutlinedTextField(value = customAccent, onValueChange = { customAccent = it }, label = { Text("accent #hex") })
-                OutlinedTextField(value = customText, onValueChange = { customText = it }, label = { Text("text #hex") })
-                Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customAccent, customText) } }) { Text("apply") }
+                OutlinedTextField(value = customBg, onValueChange = { customBg = it }, label = { Text(L.tr("bg #hex")) })
+                OutlinedTextField(value = customAccent, onValueChange = { customAccent = it }, label = { Text(L.tr("accent #hex")) })
+                OutlinedTextField(value = customText, onValueChange = { customText = it }, label = { Text(L.tr("text #hex")) })
+                Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customAccent, customText) } }) { Text(L.tr("apply")) }
             }
         }
 
@@ -695,7 +695,7 @@ fun SettingsTab(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = fontUrl, onValueChange = { fontUrl = it }, label = { Text(".ttf url") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = fontUrl, onValueChange = { fontUrl = it }, label = { Text(L.tr(".ttf url")) }, modifier = Modifier.weight(1f))
                 Button(onClick = {
                     scope.launch {
                         try {
@@ -714,7 +714,7 @@ fun SettingsTab(
                             }
                         } catch (e: Exception) { fontMsg = "download failed" }
                     }
-                }) { Text("dl") }
+                }) { Text(L.tr("dl")) }
             }
             if (fontMsg.isNotEmpty()) Text(fontMsg, color = theme.subtext, fontSize = 11.sp)
         }
@@ -740,9 +740,9 @@ fun SettingsTab(
         }
 
         Panel("about", theme, shape = RoundedCornerShape(0.dp)) {
-            Text("physic v1.2", color = theme.text, fontSize = 13.sp)
-            Text("github.com/Tolepi/physic", color = theme.accent, fontSize = 12.sp)
-            Text("vibecoded with love", color = theme.subtext, fontSize = 11.sp)
+            Text(L.tr("physic v1.2"), color = theme.text, fontSize = 13.sp)
+            Text(L.tr("github.com/Tolepi/physic"), color = theme.accent, fontSize = 12.sp)
+            Text(L.tr("vibecoded with love"), color = theme.subtext, fontSize = 11.sp)
         }
     }
 }
@@ -765,23 +765,23 @@ fun PlaylistsTab(theme: ThemeColors) {
     when (val open = openPlaylist) {
         null -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Panel("your playlists", theme, shape = RoundedCornerShape(0.dp)) {
-                if (names.isEmpty()) Text("no playlists yet — make one!", color = theme.subtext, fontSize = 13.sp)
+                if (names.isEmpty()) Text(L.tr("no playlists yet — make one!"), color = theme.subtext, fontSize = 13.sp)
                 names.forEach { name ->
                     Row(Modifier.fillMaxWidth().clickable { openPlaylist = name }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(name, color = theme.text, modifier = Modifier.weight(1f))
-                        Text("[delete]", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { Playlists.delete(c, name); refresh() })
+                        Text(L.tr("[delete]"), color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { Playlists.delete(c, name); refresh() })
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Button(onClick = { showNew = !showNew }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text("[ new playlist ]", color = theme.bg) }
+                Button(onClick = { showNew = !showNew }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr("[ new playlist ]"), color = theme.bg) }
                 if (showNew) {
-                    OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("name") })
-                    Button(onClick = { if (newName.isNotBlank()) { Playlists.create(c, newName); refresh(); newName = ""; showNew = false } }) { Text("create") }
+                    OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text(L.tr("name")) })
+                    Button(onClick = { if (newName.isNotBlank()) { Playlists.create(c, newName); refresh(); newName = ""; showNew = false } }) { Text(L.tr("create")) }
                 }
             }
             Row {
-                Text("[export]", color = theme.accent, modifier = Modifier.clickable { exportText = Playlists.exportJson(c) }.padding(end = 16.dp))
-                Text("[import]", color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
+                Text(L.tr("[export]"), color = theme.accent, modifier = Modifier.clickable { exportText = Playlists.exportJson(c) }.padding(end = 16.dp))
+                Text(L.tr("[import]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
             }
             exportText?.let { text ->
                 Panel("export (copy this into a file to share)", theme, shape = RoundedCornerShape(0.dp)) {
@@ -789,8 +789,8 @@ fun PlaylistsTab(theme: ThemeColors) {
                 }
             }
             if (showImport) {
-                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text("paste playlist json") }, modifier = Modifier.fillMaxWidth().height(160.dp))
-                Button(onClick = { Playlists.importJson(c, importText); refresh(); showImport = false }) { Text("import") }
+                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr("paste playlist json")) }, modifier = Modifier.fillMaxWidth().height(160.dp))
+                Button(onClick = { Playlists.importJson(c, importText); refresh(); showImport = false }) { Text(L.tr("import")) }
             }
         }
         else -> {
@@ -803,17 +803,17 @@ fun PlaylistsTab(theme: ThemeColors) {
                 paths.mapNotNull { p -> fullIndex[p] }
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("← back", color = theme.accent, modifier = Modifier.clickable { openPlaylist = null; refresh() }.padding(bottom = 8.dp))
+                Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { openPlaylist = null; refresh() }.padding(bottom = 8.dp))
                 Text(open, color = theme.text, fontSize = 18.sp)
                 Spacer(Modifier.height(6.dp))
-                if (songs.isEmpty()) Text("empty — add songs from the songs tab (+ icon)", color = theme.subtext, fontSize = 12.sp)
+                if (songs.isEmpty()) Text(L.tr("empty — add songs from the songs tab (+ icon)"), color = theme.subtext, fontSize = 12.sp)
                 songs.forEachIndexed { i, s ->
                     Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, i) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(s.path.substringAfterLast('/'), color = theme.subtext, fontSize = 11.sp, maxLines = 1)
                         }
-                        Text("[x]", color = theme.subtext, modifier = Modifier.clickable { Playlists.remove(c, open, i); removeTick++ })
+                        Text(L.tr("[x]"), color = theme.subtext, modifier = Modifier.clickable { Playlists.remove(c, open, i); removeTick++ })
                     }
                 }
             }
@@ -834,12 +834,12 @@ fun OnboardingScreen(theme: ThemeColors) {
     var fontName by remember { mutableStateOf("DM Mono") }
     LaunchedEffect(Unit) { allFolders = MusicIndex.foldersOfLibrary(c) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("welcome to Physic", color = theme.text, fontSize = 24.sp)
-        Text("you can change all of this later in ~/settings", color = theme.subtext, fontSize = 12.sp)
+        Text(L.tr("welcome to Physic"), color = theme.text, fontSize = 24.sp)
+        Text(L.tr("you can change all of this later in ~/settings"), color = theme.subtext, fontSize = 12.sp)
 
         Panel("profile", theme, shape = RoundedCornerShape(0.dp)) {
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("your name") })
-            OutlinedTextField(value = welcome, onValueChange = { welcome = it }, label = { Text("welcome message") })
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(L.tr("your name")) })
+            OutlinedTextField(value = welcome, onValueChange = { welcome = it }, label = { Text(L.tr("welcome message")) })
         }
         Panel("theme", theme, shape = RoundedCornerShape(0.dp)) {
             LazyRow {
@@ -851,7 +851,7 @@ fun OnboardingScreen(theme: ThemeColors) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("rounded corners", color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text(L.tr("rounded corners"), color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Switch(checked = rounded, onCheckedChange = { rounded = it })
             }
         }
@@ -881,6 +881,6 @@ fun OnboardingScreen(theme: ThemeColors) {
                 Prefs.setFolders(c, foldersOn)
                 Prefs.setOnboarded(c, true)
             }
-        }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text("[ finish ]", color = theme.bg) }
+        }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr("[ finish ]"), color = theme.bg) }
     }
 }

@@ -24,7 +24,7 @@ fun EqualizerTab(theme: ThemeColors) {
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Panel("equalizer", theme, shape = RoundedCornerShape(0.dp)) {
             if (player == null) {
-                Text("play something first", color = theme.subtext)
+                Text(L.tr("play something first"), color = theme.subtext)
                 return@Panel
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

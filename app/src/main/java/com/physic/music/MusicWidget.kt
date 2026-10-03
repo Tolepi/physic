@@ -48,8 +48,8 @@ class MusicWidget : GlanceAppWidget() {
                 Row {
                     Text(if (playing) "❚❚" else "▶", style = TextStyle(color = ColorProvider(Color.White), fontSize = 20.sp),
                         modifier = GlanceModifier.clickable(actionRunCallback<TogglePlayback>()))
-                    Text("    ", style = TextStyle(fontSize = 20.sp))
-                    Text("⏭", style = TextStyle(color = ColorProvider(Color.White), fontSize = 20.sp),
+                    Text(L.tr("    "), style = TextStyle(fontSize = 20.sp))
+                    Text(L.tr("⏭"), style = TextStyle(color = ColorProvider(Color.White), fontSize = 20.sp),
                         modifier = GlanceModifier.clickable(actionRunCallback<NextTrack>()))
                 }
             }
