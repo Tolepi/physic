@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -383,8 +384,16 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
 fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
     val c = LocalContext.current
     var addSong by remember { mutableStateOf<Song?>(null) }
+    var query by remember { mutableStateOf("") }
+    val shown = remember(songs, query) {
+        if (query.isBlank()) songs else songs.filter {
+            it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true) || it.album.contains(query, ignoreCase = true)
+        }
+    }
+    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(L.tr("search")) },
+        modifier = Modifier.fillMaxWidth())
     LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        items(songs) { s ->
+        items(shown) { s ->
             val idx = songs.indexOf(s)
             Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp))
@@ -434,6 +443,7 @@ fun AlbumsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) 
     val albums = remember(songs) { songs.groupBy { it.album } }
     var selected by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     val sel = selected
+    if (sel != null) BackHandler { selected = null }
     if (sel != null) {
         DetailView(theme, title = sel.first, subtitle = "${sel.second.first().artist} · ${sel.second.size} tracks",
             coverModel = albumArtUri(sel.second.first()), songs = sel.second, onBack = { selected = null })
@@ -463,6 +473,8 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
     val artists = remember(songs) { songs.groupBy { it.artist } }
     var selectedArtist by remember { mutableStateOf<String?>(null) }
     var selectedAlbum by remember { mutableStateOf<String?>(null) }
+    if (selectedAlbum != null) BackHandler { selectedAlbum = null }
+    else if (selectedArtist != null) BackHandler { selectedArtist = null }
 
     when {
         selectedAlbum != null && selectedArtist != null -> {
@@ -588,6 +600,8 @@ fun StatsTab(theme: ThemeColors) {
     }
     var fullView by remember { mutableStateOf<String?>(null) }
 
+    if (fullView != null) BackHandler { fullView = null }
+
     when (fullView) {
         "songs" -> FullListView("most played songs", top.map { it.first.substringAfterLast('/') to it.second }, theme) { fullView = null }
         "albums" -> FullListView("top albums", albums, theme) { fullView = null }
@@ -675,9 +689,30 @@ fun SettingsTab(
                 }
             }
             if (themeName == "Custom") {
-                OutlinedTextField(value = customBg, onValueChange = { customBg = it }, label = { Text(L.tr("bg #hex")) })
-                OutlinedTextField(value = customAccent, onValueChange = { customAccent = it }, label = { Text(L.tr("accent #hex")) })
-                OutlinedTextField(value = customText, onValueChange = { customText = it }, label = { Text(L.tr("text #hex")) })
+                listOf(true to customBg, true to customAccent, true to customText).forEachIndexed { i, pair ->
+                    val label = listOf("bg", "accent", "text")[i]
+                    val state = pair.second
+                    Column(Modifier.fillMaxWidth().border(1.dp, theme.border).padding(8.dp)) {
+                        Text(label, color = theme.text, fontSize = 12.sp)
+                        ColorSliderPicker(
+                            current = state,
+                            onPick = { hex ->
+                                when (label) {
+                                    "bg" -> customBg = hex
+                                    "accent" -> customAccent = hex
+                                    else -> customText = hex
+                                }
+                            }
+                        )
+                        OutlinedTextField(value = state, onValueChange = { v ->
+                            when (label) {
+                                "bg" -> customBg = v
+                                "accent" -> customAccent = v
+                                else -> customText = v
+                            }
+                        }, label = { Text(L.tr("$label #hex")) }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
                 Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customAccent, customText) } }) { Text(L.tr("apply")) }
             }
         }
@@ -762,6 +797,8 @@ fun PlaylistsTab(theme: ThemeColors) {
 
     val refresh = { names = Playlists.names(c) }
 
+    if (openPlaylist != null) BackHandler { openPlaylist = null }
+
     when (val open = openPlaylist) {
         null -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Panel("your playlists", theme, shape = RoundedCornerShape(0.dp)) {
@@ -819,6 +856,43 @@ fun PlaylistsTab(theme: ThemeColors) {
             }
         }
     }
+}
+
+@Composable
+fun ColorSliderPicker(current: String, onPick: (String) -> Unit) {
+    val initial = remember(current) {
+        try {
+            val c = android.graphics.Color.parseColor(if (current.startsWith("#")) current else "#$current")
+            val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(c, it) }
+            hsv
+        } catch (e: Exception) {
+            FloatArray(3)
+        }
+    }
+    var hue by remember(current) { mutableStateOf(initial[0]) }
+    var sat by remember(current) { mutableStateOf(initial[1]) }
+    var value by remember(current) { mutableStateOf(initial[2]) }
+    val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
+    val hex = String.format("#%02X%02X%02X", (rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
+
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp).background(Color(rgb)).border(1.dp, Color.Gray))
+            Spacer(Modifier.width(8.dp))
+            Text(hex, color = Color.Gray, fontSize = 12.sp)
+        }
+        Text("hue", fontSize = 10.sp, color = Color.Gray)
+        Slider(value = hue, onValueChange = { hue = it; onPick(String.format("#%02X%02X%02X", (android.graphics.Color.HSVToColor(floatArrayOf(it, sat, value)) shr 16) and 0xFF, (android.graphics.Color.HSVToColor(floatArrayOf(it, sat, value)) shr 8) and 0xFF, android.graphics.Color.HSVToColor(floatArrayOf(it, sat, value)) and 0xFF)) }, valueRange = 0f..360f)
+        Text("saturation", fontSize = 10.sp, color = Color.Gray)
+        Slider(value = sat, onValueChange = { sat = it; onPick(hexColor(it, hue, value)) }, valueRange = 0f..1f)
+        Text("value", fontSize = 10.sp, color = Color.Gray)
+        Slider(value = value, onValueChange = { value = it; onPick(hexColor(sat, hue, it)) }, valueRange = 0f..1f)
+    }
+}
+
+private fun hexColor(sat: Float, hue: Float, value: Float): String {
+    val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
+    return String.format("#%02X%02X%02X", (rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
 }
 
 @Composable
