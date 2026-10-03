@@ -35,11 +35,14 @@ class MusicService : MediaSessionService() {
         private const val CHANNEL_ID = "physic"
     }
 
+    private var countedSong: String? = null
+
     override fun onCreate() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Playback", NotificationManager.IMPORTANCE_LOW))
         player = ExoPlayer.Builder(this).build().also { Playback.player = it }
+        scope.launch { Prefs.pauseUnplug(applicationContext).collect { player?.setHandleAudioBecomingNoisy(it) } }
         session = MediaSession.Builder(this, player!!)
             .setSessionActivity(
                 PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
@@ -49,11 +52,8 @@ class MusicService : MediaSessionService() {
                 item?.mediaMetadata?.let { m ->
                     Playback.title.value = m.title?.toString() ?: "?"
                     Playback.artist.value = m.artist?.toString() ?: "?"
-                    songUriToPath(item.localConfiguration?.uri?.toString())?.let { path ->
-                        val song = Playback.queue.value.firstOrNull { it.uri.toString() == item.localConfiguration?.uri?.toString() }
-                        if (song != null) { Stats.played(applicationContext, song.path, song.album, song.artist); }
-                    }
                 }
+                countedSong = null
                 updateWidget()
                 updateNotification()
             }
@@ -63,6 +63,30 @@ class MusicService : MediaSessionService() {
                 updateNotification()
             }
         })
+
+        // Count a play only after playCountPct% of the current song has played.
+        scope.launch {
+            var currentPct = 20
+            launch { Prefs.playCountPct(applicationContext).collect { currentPct = it } }
+            while (true) {
+                kotlinx.coroutines.delay(1000)
+                try {
+                    val p = player
+                    if (p != null && p.playWhenReady && p.currentPosition > 0 && p.duration > 0) {
+                        val pct = currentPct.toLong().coerceIn(1, 99)
+                        if (p.currentPosition >= p.duration * pct / 100) {
+                            val item = p.currentMediaItem
+                            val uriStr = item?.localConfiguration?.uri?.toString()
+                            val song = Playback.queue.value.firstOrNull { it.uri.toString() == uriStr }
+                            if (song != null && countedSong != song.uri.toString()) {
+                                countedSong = song.uri.toString()
+                                Stats.played(applicationContext, song.path, song.album, song.artist)
+                            }
+                        }
+                    }
+                } catch (e: Exception) { /* ignore */ }
+            }
+        }
     }
 
     private fun buildNotification(): Notification {

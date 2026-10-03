@@ -36,6 +36,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -59,6 +61,22 @@ class MainActivity : ComponentActivity() {
         requestPermissions(arrayOf("android.permission.READ_MEDIA_AUDIO", "android.permission.POST_NOTIFICATIONS"), 1)
         startService(android.content.Intent(this, MusicService::class.java))
         setContent { PhysicApp() }
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                if (Prefs.updateCheck(this@MainActivity).first()) {
+                    val conn = java.net.URL("https://api.github.com/repos/Tolepi/physic/releases/latest").openConnection() as java.net.HttpURLConnection
+                    val body = conn.inputStream.bufferedReader().readText()
+                    val tag = "\"tag_name\"\\s*:\\s*\"(v[^\"]+)\"".toRegex().find(body)?.groupValues?.get(1)
+                    val current = packageManager.getPackageInfo(packageName, 0).versionName
+                    if (tag != null && tag != "v$current") {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            android.widget.Toast.makeText(this@MainActivity, "New Physic update: $tag at github.com/Tolepi/physic/releases", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 }
 
@@ -175,12 +193,12 @@ fun PhysicApp() {
                 // ---- now playing panel ----
                 if (title.isNotEmpty()) {
                     val cur = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: 0)
-                    Column(Modifier.fillMaxWidth().border(1.dp, theme.border).background(theme.surface).padding(10.dp)) {
+                    Column(Modifier.fillMaxWidth().border(1.dp, theme.border, shape).background(theme.surface, shape).padding(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (cur != null) {
                                 AsyncImage(
                                     model = albumArtUri(cur), contentDescription = null,
-                                    modifier = Modifier.size(52.dp), contentScale = ContentScale.Crop
+                                    modifier = Modifier.size(52.dp).clip(shape), contentScale = ContentScale.Crop
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }
@@ -305,7 +323,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (profilePic.isNotEmpty()) {
                     AsyncImage(model = profilePic, contentDescription = null,
-                        modifier = Modifier.size(44.dp).border(1.dp, theme.border, shape), contentScale = ContentScale.Crop)
+                        modifier = Modifier.size(44.dp).clip(shape).border(1.dp, theme.border, shape), contentScale = ContentScale.Crop)
                 } else {
                     Box(Modifier.size(44.dp).background(theme.bg, shape).border(1.dp, theme.border, shape)) {
                         Text(profileName.firstOrNull()?.uppercase() ?: "?", color = theme.accent, modifier = Modifier.align(Alignment.Center))
@@ -328,7 +346,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             if (topSongList.isEmpty()) Text(L.tr("no plays yet"), color = theme.subtext, fontSize = 13.sp)
             topSongList.take(5).forEachIndexed { i, s ->
                 Row(Modifier.fillMaxWidth().clickable { Playback.play(c, topSongList, i) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(34.dp))
+                    AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(34.dp).clip(shape))
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -351,7 +369,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 items(albums) { (name, list) ->
                     Column(Modifier.width(110.dp).clickable { Playback.play(c, list, 0) }) {
                         AsyncImage(model = albumArtUri(list.first()), contentDescription = null,
-                            modifier = Modifier.size(110.dp).background(theme.bg, shape), contentScale = ContentScale.Crop)
+                            modifier = Modifier.size(110.dp).clip(shape).background(theme.bg, shape), contentScale = ContentScale.Crop)
                         Text(name, color = theme.text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${list.size} tracks", color = theme.subtext, fontSize = 10.sp)
                     }
@@ -390,13 +408,14 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
             it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true) || it.album.contains(query, ignoreCase = true)
         }
     }
-    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(L.tr("search")) },
-        modifier = Modifier.fillMaxWidth())
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        items(shown) { s ->
-            val idx = songs.indexOf(s)
+    Column(Modifier.fillMaxSize()) {
+        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(L.tr("search")) },
+            modifier = Modifier.fillMaxWidth())
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items(shown) { s ->
+                val idx = songs.indexOf(s)
             Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp))
+                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp).clip(shape))
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -430,6 +449,7 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
             confirmButton = {}
         )
     }
+    }
 }
 
 fun formatTime(ms: Long): String {
@@ -452,7 +472,7 @@ fun AlbumsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) 
             albums.entries.sortedBy { it.key }.forEach { (name, list) ->
                 item {
                     Row(Modifier.fillMaxWidth().clickable { selected = name to list }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(model = albumArtUri(list.first()), contentDescription = null, modifier = Modifier.size(56.dp))
+                        AsyncImage(model = albumArtUri(list.first()), contentDescription = null, modifier = Modifier.size(56.dp).clip(shape))
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(name, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -498,7 +518,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val imgModel: Any = if (customImg.isEmpty()) albumArtUri(list.first()) else customImg
                     AsyncImage(model = imgModel,
-                        contentDescription = null, modifier = Modifier.size(72.dp).border(1.dp, theme.border, shape))
+                        contentDescription = null, Modifier.size(72.dp).clip(shape).border(1.dp, theme.border, shape))
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(selectedArtist!!, color = theme.text, fontSize = 18.sp)
@@ -509,7 +529,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                 Spacer(Modifier.height(10.dp))
                 byAlbum.entries.sortedBy { it.key }.forEach { (album, albumSongs) ->
                     Row(Modifier.fillMaxWidth().clickable { selectedAlbum = album }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(model = albumArtUri(albumSongs.first()), contentDescription = null, modifier = Modifier.size(48.dp))
+                        AsyncImage(model = albumArtUri(albumSongs.first()), contentDescription = null, modifier = Modifier.size(48.dp).clip(shape))
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(album, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -526,7 +546,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                         Row(Modifier.fillMaxWidth().clickable { selectedArtist = name }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             val customImg by Prefs.artistImage(c, name).collectAsState(initial = "")
                             AsyncImage(model = customImg.ifEmpty { albumArtUri(list.first()).toString() }, contentDescription = null,
-                                modifier = Modifier.size(48.dp).border(1.dp, theme.border, shape))
+                                Modifier.size(48.dp).clip(shape).border(1.dp, theme.border, shape))
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(name, color = theme.text)
@@ -541,7 +561,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
 }
 
 @Composable
-fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: Any?, songs: List<Song>, onBack: () -> Unit) {
+fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: Any?, songs: List<Song>, onBack: () -> Unit, shape: RoundedCornerShape = RoundedCornerShape(0.dp)) {
     val c = LocalContext.current
     var sortMode by remember { mutableStateOf(0) } // 0 = album order (track), 1 = title A-Z, 2 = year
     val sorted = remember(songs, sortMode) {
@@ -555,7 +575,7 @@ fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: 
         Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (coverModel != null) {
-                AsyncImage(model = coverModel, contentDescription = null, modifier = Modifier.size(72.dp))
+                AsyncImage(model = coverModel, contentDescription = null, modifier = Modifier.size(72.dp).clip(shape))
                 Spacer(Modifier.width(12.dp))
             }
             Column {
@@ -571,7 +591,7 @@ fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: 
         Spacer(Modifier.height(6.dp))
         sorted.forEachIndexed { i, s ->
             Row(Modifier.fillMaxWidth().clickable { Playback.play(c, sorted, i) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(36.dp))
+                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(36.dp).clip(shape))
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -758,6 +778,29 @@ fun SettingsTab(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (rounded) "rounded on" else "square (default)", color = theme.text, modifier = Modifier.weight(1f))
                 Switch(checked = rounded, onCheckedChange = { onUpdate(null, it, null) })
+            }
+        }
+
+        val pauseUnplug by Prefs.pauseUnplug(c).collectAsState(initial = true)
+        val updateCheck by Prefs.updateCheck(c).collectAsState(initial = false)
+        val playPct by Prefs.playCountPct(c).collectAsState(initial = 20)
+        Panel("playback", theme, shape = RoundedCornerShape(0.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("pause when headphones unplugged", color = theme.text, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                Switch(checked = pauseUnplug, onCheckedChange = { checked ->
+                    scope.launch { Prefs.setPauseUnplug(c, checked); Playback.player?.setHandleAudioBecomingNoisy(checked) }
+                })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("check for updates on launch", color = theme.text, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                Switch(checked = updateCheck, onCheckedChange = { scope.launch { Prefs.setUpdateCheck(c, it) } })
+            }
+            Column {
+                Text("count a play after ${playPct}% of the song", color = theme.text, fontSize = 13.sp)
+                Slider(value = playPct.toFloat(),
+                    onValueChange = { v -> scope.launch { Prefs.setPlayCountPct(c, v.toInt().coerceIn(1, 99)) } },
+                    valueRange = 1f..99f,
+                    colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
             }
         }
 

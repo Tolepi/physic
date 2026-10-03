@@ -25,6 +25,9 @@ object Prefs {
     private val PROFILE_PIC = stringPreferencesKey("profile_pic")
     private val FONT_NAME = stringPreferencesKey("font_name")
     private val ONBOARDED = booleanPreferencesKey("onboarded")
+    private val PAUSE_UNPLUG = booleanPreferencesKey("pause_unplug")
+    private val UPDATE_CHECK = booleanPreferencesKey("update_check")
+    private val PLAY_COUNT_PCT = intPreferencesKey("play_count_pct")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -40,6 +43,12 @@ object Prefs {
     fun fontName(c: Context) = c.ds.data.map { it[FONT_NAME] ?: "DM Mono" }
     fun onboarded(c: Context) = c.ds.data.map { it[ONBOARDED] ?: false }
     suspend fun setOnboarded(c: Context, v: Boolean) = c.ds.edit { it[ONBOARDED] = v }
+    fun pauseUnplug(c: Context) = c.ds.data.map { it[PAUSE_UNPLUG] ?: true }
+    suspend fun setPauseUnplug(c: Context, v: Boolean) = c.ds.edit { it[PAUSE_UNPLUG] = v }
+    fun updateCheck(c: Context) = c.ds.data.map { it[UPDATE_CHECK] ?: false }
+    suspend fun setUpdateCheck(c: Context, v: Boolean) = c.ds.edit { it[UPDATE_CHECK] = v }
+    fun playCountPct(c: Context) = c.ds.data.map { it[PLAY_COUNT_PCT] ?: 20 }
+    suspend fun setPlayCountPct(c: Context, v: Int) = c.ds.edit { it[PLAY_COUNT_PCT] = v }
     suspend fun setWelcome(c: Context, v: String) = c.ds.edit { it[WELCOME] = v }
     suspend fun setProfileName(c: Context, v: String) = c.ds.edit { it[PROFILE_NAME] = v }
     suspend fun setProfilePic(c: Context, v: String) = c.ds.edit { it[PROFILE_PIC] = v }
