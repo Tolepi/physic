@@ -113,6 +113,9 @@ fun PhysicApp() {
             "FiraCode" to R.font.fira_code,
             "CascadiaCode" to R.font.cascadia_code,
             "SpaceMono" to R.font.space_mono,
+            "Iosevka" to R.font.iosevka,
+            "MapleMono" to R.font.maple_mono,
+            "MapleMono Italic" to R.font.maple_mono_italic,
         )
         when {
             bundled.containsKey(fontName) -> androidx.compose.ui.text.font.FontFamily(
@@ -738,13 +741,13 @@ fun SettingsTab(
         }
 
         Panel("font", theme, shape = RoundedCornerShape(0.dp)) {
-            val bundledFonts = listOf("DM Mono", "DM Mono Italic", "JetBrainsMono", "FiraCode", "CascadiaCode", "SpaceMono")
+            val bundledFonts = listOf("DM Mono", "DM Mono Italic", "JetBrainsMono", "FiraCode", "CascadiaCode", "SpaceMono", "Iosevka", "MapleMono", "MapleMono Italic")
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 bundledFonts.forEach { f ->
                     Text(f, color = if (fontName == f) theme.accent else theme.text,
                         modifier = Modifier.clickable { scope.launch { Prefs.setFontName(c, f) } }.padding(end = 14.dp), fontSize = 13.sp)
                 }
-                downloaded.filter { it != "dm_mono_regular" && it != "dm_mono_italic" && it != "space_mono" && it != "cascadia_code" && it != "fira_code" && it != "jetbrains_mono" }.forEach {
+                downloaded.filter { it != "dm_mono_regular" && it != "dm_mono_italic" && it != "space_mono" && it != "cascadia_code" && it != "fira_code" && it != "jetbrains_mono" && it != "iosevka" && it != "maple_mono" && it != "maple_mono_italic" }.forEach {
                     Text(it, color = if (fontName == it) theme.accent else theme.text,
                         modifier = Modifier.clickable { scope.launch { Prefs.setFontName(c, it) } }.padding(end = 14.dp), fontSize = 13.sp)
                 }
@@ -818,7 +821,7 @@ fun SettingsTab(
         }
 
         Panel("about", theme, shape = RoundedCornerShape(0.dp)) {
-            Text(L.tr("physic v1.2"), color = theme.text, fontSize = 13.sp)
+            Text("physic v${LocalContext.current.packageManager.getPackageInfo(LocalContext.current.packageName, 0).versionName}", color = theme.text, fontSize = 13.sp)
             Text(L.tr("github.com/Tolepi/physic"), color = theme.accent, fontSize = 12.sp)
             Text(L.tr("vibecoded with love"), color = theme.subtext, fontSize = 11.sp)
         }
@@ -973,7 +976,7 @@ fun OnboardingScreen(theme: ThemeColors) {
             }
         }
         Panel("font", theme, shape = RoundedCornerShape(0.dp)) {
-            listOf("DM Mono", "JetBrainsMono", "FiraCode", "CascadiaCode", "SpaceMono").forEach {
+            listOf("DM Mono", "JetBrainsMono", "FiraCode", "CascadiaCode", "SpaceMono", "Iosevka", "MapleMono", "MapleMono Italic").forEach {
                 Text(it, color = if (fontName == it) theme.accent else theme.subtext,
                     modifier = Modifier.clickable { fontName = it }.padding(vertical = 3.dp))
             }
