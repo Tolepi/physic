@@ -10,8 +10,8 @@ android {
         applicationId = "com.physic.music"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 143
+        versionName = "1.4.3"
     }
     signingConfigs {
         create("release") {
