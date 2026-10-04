@@ -207,9 +207,10 @@ fun PhysicApp() {
                     Column(Modifier.fillMaxWidth().border(1.dp, theme.border, shape).background(theme.surface, shape).padding(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (cur != null) {
+                                val npSize by Prefs.npSize(c).collectAsState(initial = 52)
                                 AsyncImage(
                                     model = albumArtUri(cur), contentDescription = null,
-                                    modifier = Modifier.size(52.dp).clip(shape), contentScale = ContentScale.Crop
+                                    modifier = Modifier.size(npSize.dp).clip(shape), contentScale = ContentScale.Crop
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }
@@ -469,6 +470,8 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
     val c = LocalContext.current
     var addSong by remember { mutableStateOf<Song?>(null) }
     var query by remember { mutableStateOf("") }
+    val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
+    val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
     val shown = remember(songs, query) {
         if (query.isBlank()) songs else songs.filter {
             it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true) || it.album.contains(query, ignoreCase = true)
@@ -493,8 +496,8 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(shownSorted) { s ->
                 val idx = songs.indexOf(s)
-            Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp).clip(shape))
+            Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(coverSize.dp).clip(shape))
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -549,6 +552,8 @@ fun humanTime(ms: Long): String {
 @Composable
 fun AlbumsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
     val c = LocalContext.current
+    val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
+    val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
     val albums = remember(songs) { songs.groupBy { it.album } }
     var selected by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     val sel = selected
@@ -560,8 +565,8 @@ fun AlbumsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) 
         LazyColumn {
             albums.entries.sortedBy { it.key }.forEach { (name, list) ->
                 item {
-                    Row(Modifier.fillMaxWidth().clickable { selected = name to list }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(model = albumArtUri(list.first()), contentDescription = null, modifier = Modifier.size(56.dp).clip(shape))
+                    Row(Modifier.fillMaxWidth().clickable { selected = name to list }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(model = albumArtUri(list.first()), contentDescription = null, modifier = Modifier.size(coverSize.dp + 16.dp).clip(shape))
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(name, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -580,6 +585,8 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     val artists = remember(songs) { songs.groupBy { it.artist } }
+    val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
+    val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
     var selectedArtist by remember { mutableStateOf<String?>(null) }
     var selectedAlbum by remember { mutableStateOf<String?>(null) }
     if (selectedAlbum != null) BackHandler { selectedAlbum = null }
@@ -617,8 +624,8 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                 }
                 Spacer(Modifier.height(10.dp))
                 byAlbum.entries.sortedBy { it.key }.forEach { (album, albumSongs) ->
-                    Row(Modifier.fillMaxWidth().clickable { selectedAlbum = album }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(model = albumArtUri(albumSongs.first()), contentDescription = null, modifier = Modifier.size(48.dp).clip(shape))
+                    Row(Modifier.fillMaxWidth().clickable { selectedAlbum = album }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(model = albumArtUri(albumSongs.first()), contentDescription = null, modifier = Modifier.size(coverSize.dp + 8.dp).clip(shape))
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(album, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -632,10 +639,10 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
             LazyColumn {
                 artists.entries.sortedBy { it.key }.forEach { (name, list) ->
                     item {
-                        Row(Modifier.fillMaxWidth().clickable { selectedArtist = name }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clickable { selectedArtist = name }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
                             val customImg by Prefs.artistImage(c, name).collectAsState(initial = "")
                             AsyncImage(model = customImg.ifEmpty { albumArtUri(list.first()).toString() }, contentDescription = null,
-                                Modifier.size(48.dp).clip(shape).border(1.dp, theme.border, shape))
+                                Modifier.size(coverSize.dp + 8.dp).clip(shape).border(1.dp, theme.border, shape))
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(name, color = theme.text)
@@ -653,6 +660,9 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
 fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: Any?, songs: List<Song>, onBack: () -> Unit, shape: RoundedCornerShape = RoundedCornerShape(0.dp)) {
     val c = LocalContext.current
     var sortMode by remember { mutableStateOf(0) } // 0 = album order (track), 1 = title A-Z, 2 = year
+    val c2 = LocalContext.current
+    val rowPad by Prefs.rowPad(c2).collectAsState(initial = 8)
+    val coverSize by Prefs.coverSize(c2).collectAsState(initial = 40)
     val sorted = remember(songs, sortMode) {
         when (sortMode) {
             1 -> songs.sortedBy { it.title.lowercase() }
@@ -679,8 +689,8 @@ fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: 
         }
         Spacer(Modifier.height(6.dp))
         sorted.forEachIndexed { i, s ->
-            Row(Modifier.fillMaxWidth().clickable { Playback.play(c, sorted, i) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(36.dp).clip(shape))
+            Row(Modifier.fillMaxWidth().clickable { Playback.play(c, sorted, i) }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(coverSize.dp).clip(shape))
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -929,6 +939,21 @@ fun SettingsTab(
             Text(L.tr("github.com/Tolepi/physic"), color = theme.accent, fontSize = 12.sp)
             Text(L.tr("vibecoded with love"), color = theme.subtext, fontSize = 11.sp)
         }
+
+        val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
+        val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
+        val npSize by Prefs.npSize(c).collectAsState(initial = 52)
+        Panel("customization", theme, shape = RoundedCornerShape(0.dp)) {
+            Text("song row padding: ${rowPad}dp", color = theme.text, fontSize = 13.sp)
+            Slider(value = rowPad.toFloat(), onValueChange = { v -> scope.launch { Prefs.setRowPad(c, v.toInt().coerceIn(0, 24)) } }, valueRange = 0f..24f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+            Text("cover size in lists: ${coverSize}dp", color = theme.text, fontSize = 13.sp)
+            Slider(value = coverSize.toFloat(), onValueChange = { v -> scope.launch { Prefs.setCoverSize(c, v.toInt().coerceIn(24, 96)) } }, valueRange = 24f..96f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+            Text("now playing cover: ${npSize}dp", color = theme.text, fontSize = 13.sp)
+            Slider(value = npSize.toFloat(), onValueChange = { v -> scope.launch { Prefs.setNpSize(c, v.toInt().coerceIn(32, 96)) } }, valueRange = 32f..96f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+        }
     }
 }
 
@@ -1010,18 +1035,21 @@ fun PlaylistsTab(theme: ThemeColors) {
 
 @Composable
 fun ColorSliderPicker(current: String, onPick: (String) -> Unit) {
-    val initial = remember(current) {
+    val initialHsv = remember(current) {
         try {
-            val c = android.graphics.Color.parseColor(if (current.startsWith("#")) current else "#$current")
-            val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(c, it) }
-            hsv
-        } catch (e: Exception) {
-            FloatArray(3)
-        }
+            val parsed = android.graphics.Color.parseColor(if (current.startsWith("#")) current else "#$current")
+            val out = FloatArray(3)
+            android.graphics.Color.colorToHSV(parsed, out)
+            out
+        } catch (e: Exception) { FloatArray(3) }
     }
-    var hue by remember(current) { mutableStateOf(initial[0]) }
-    var sat by remember(current) { mutableStateOf(initial[1]) }
-    var value by remember(current) { mutableStateOf(initial[2]) }
+    var hue by remember { mutableStateOf(initialHsv[0]) }
+    var sat by remember { mutableStateOf(initialHsv[1]) }
+    var value by remember { mutableStateOf(initialHsv[2]) }
+    LaunchedEffect(current) {
+        // keep the slider synced when hex is typed manually
+        hue = initialHsv[0]; sat = initialHsv[1]; value = initialHsv[2]
+    }
     val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
     val hex = String.format("#%02X%02X%02X", (rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
 
@@ -1032,15 +1060,15 @@ fun ColorSliderPicker(current: String, onPick: (String) -> Unit) {
             Text(hex, color = Color.Gray, fontSize = 12.sp)
         }
         Text("hue", fontSize = 10.sp, color = Color.Gray)
-        Slider(value = hue, onValueChange = { hue = it; onPick(String.format("#%02X%02X%02X", (android.graphics.Color.HSVToColor(floatArrayOf(it, sat, value)) shr 16) and 0xFF, (android.graphics.Color.HSVToColor(floatArrayOf(it, sat, value)) shr 8) and 0xFF, android.graphics.Color.HSVToColor(floatArrayOf(it, sat, value)) and 0xFF)) }, valueRange = 0f..360f)
+        Slider(value = hue, onValueChange = { hue = it; onPick(stringColor(hue, sat, value)) }, valueRange = 0f..360f)
         Text("saturation", fontSize = 10.sp, color = Color.Gray)
-        Slider(value = sat, onValueChange = { sat = it; onPick(hexColor(it, hue, value)) }, valueRange = 0f..1f)
+        Slider(value = sat, onValueChange = { sat = it; onPick(stringColor(hue, sat, value)) }, valueRange = 0f..1f)
         Text("value", fontSize = 10.sp, color = Color.Gray)
-        Slider(value = value, onValueChange = { value = it; onPick(hexColor(sat, hue, it)) }, valueRange = 0f..1f)
+        Slider(value = value, onValueChange = { value = it; onPick(stringColor(hue, sat, value)) }, valueRange = 0f..1f)
     }
 }
 
-private fun hexColor(sat: Float, hue: Float, value: Float): String {
+private fun stringColor(hue: Float, sat: Float, value: Float): String {
     val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
     return String.format("#%02X%02X%02X", (rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
 }

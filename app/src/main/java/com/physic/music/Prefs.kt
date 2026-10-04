@@ -35,6 +35,9 @@ object Prefs {
     private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
     private val CROSSFADE_MS = intPreferencesKey("crossfade_ms")
     private val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+    private val ROW_PAD = intPreferencesKey("row_pad")
+    private val COVER_SIZE = intPreferencesKey("cover_size")
+    private val NP_SIZE = intPreferencesKey("np_size")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -66,6 +69,12 @@ object Prefs {
     suspend fun setCrossfadeMs(c: Context, v: Int) = c.ds.edit { it[CROSSFADE_MS] = v }
     fun keepScreenOn(c: Context) = c.ds.data.map { it[KEEP_SCREEN_ON] ?: true }
     suspend fun setKeepScreenOn(c: Context, v: Boolean) = c.ds.edit { it[KEEP_SCREEN_ON] = v }
+    fun rowPad(c: Context) = c.ds.data.map { it[ROW_PAD] ?: 8 }
+    suspend fun setRowPad(c: Context, v: Int) = c.ds.edit { it[ROW_PAD] = v }
+    fun coverSize(c: Context) = c.ds.data.map { it[COVER_SIZE] ?: 40 }
+    suspend fun setCoverSize(c: Context, v: Int) = c.ds.edit { it[COVER_SIZE] = v }
+    fun npSize(c: Context) = c.ds.data.map { it[NP_SIZE] ?: 52 }
+    suspend fun setNpSize(c: Context, v: Int) = c.ds.edit { it[NP_SIZE] = v }
     suspend fun setWelcome(c: Context, v: String) = c.ds.edit { it[WELCOME] = v }
     suspend fun setProfileName(c: Context, v: String) = c.ds.edit { it[PROFILE_NAME] = v }
     suspend fun setProfilePic(c: Context, v: String) = c.ds.edit { it[PROFILE_PIC] = v }
