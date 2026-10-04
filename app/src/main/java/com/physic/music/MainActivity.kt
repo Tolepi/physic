@@ -408,6 +408,14 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             }
         }
 
+        val lastPath = remember { Stats.lastPlayedPath(c) }
+        val lastSong = remember(songs, lastPath) { songs.firstOrNull { it.path == lastPath } }
+        if (lastSong != null) Panel("last played", theme, shape = shape) {
+            Text("${lastSong.title} — ${lastSong.artist}", color = theme.text, fontSize = 13.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().clickable { Playback.play(c, songs, songs.indexOf(lastSong)) }.padding(vertical = 3.dp))
+        }
+
         Panel("albums", theme, shape = shape) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(albums) { (name, list) ->
@@ -469,8 +477,21 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(L.tr("search")) },
             modifier = Modifier.fillMaxWidth())
+        val playsMap = remember(c) { Stats.topSongs(c, Int.MAX_VALUE).toMap() }
+        var sortMode by remember { mutableStateOf(0) }
+        val shownSorted = remember(shown, sortMode, playsMap) {
+            when (sortMode) {
+                1 -> shown.sortedBy { it.year.toIntOrNull() ?: Int.MAX_VALUE }
+                2 -> shown.sortedByDescending { playsMap[it.path] ?: 0 }
+                else -> shown
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text("sort: ${listOf("title", "year", "plays")[sortMode]}", color = theme.accent, fontSize = 12.sp,
+                modifier = Modifier.clickable { sortMode = (sortMode + 1) % 3 }.border(1.dp, theme.border).padding(6.dp))
+        }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(shown) { s ->
+            items(shownSorted) { s ->
                 val idx = songs.indexOf(s)
             Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp).clip(shape))

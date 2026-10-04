@@ -23,8 +23,11 @@ object Stats {
         val artists = root.optJSONObject("artists") ?: JSONObject().also { root.put("artists", it) }
         if (artist.isNotEmpty()) artists.put(artist, artists.optInt(artist, 0) + 1)
         root.put("total", root.optInt("total", 0) + 1)
+        root.put("last_path", songPath)
         save(c, root)
     }
+
+    fun lastPlayedPath(c: Context): String? = load(c).optString("last_path", "").takeIf { it.isNotBlank() }
 
     fun topArtists(c: Context, n: Int = 10): List<Pair<String, Int>> {
         val a = load(c).optJSONObject("artists") ?: return emptyList()
