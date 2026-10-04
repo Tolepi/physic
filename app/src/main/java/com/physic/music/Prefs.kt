@@ -23,11 +23,18 @@ object Prefs {
     private val WELCOME = stringPreferencesKey("welcome")
     private val PROFILE_NAME = stringPreferencesKey("profile_name")
     private val PROFILE_PIC = stringPreferencesKey("profile_pic")
+    private val PROFILE_BANNER = stringPreferencesKey("profile_banner")
+    private val PROFILE_BIO = stringPreferencesKey("profile_bio")
+    private val PROFILE_PRONOUNS = stringPreferencesKey("profile_pronouns")
+    private val FAV_SONG = stringPreferencesKey("fav_song")
     private val FONT_NAME = stringPreferencesKey("font_name")
     private val ONBOARDED = booleanPreferencesKey("onboarded")
     private val PAUSE_UNPLUG = booleanPreferencesKey("pause_unplug")
     private val UPDATE_CHECK = booleanPreferencesKey("update_check")
     private val PLAY_COUNT_PCT = intPreferencesKey("play_count_pct")
+    private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
+    private val CROSSFADE_MS = intPreferencesKey("crossfade_ms")
+    private val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -40,6 +47,10 @@ object Prefs {
     fun welcome(c: Context) = c.ds.data.map { it[WELCOME] ?: "Welcome back." }
     fun profileName(c: Context) = c.ds.data.map { it[PROFILE_NAME] ?: "listener" }
     fun profilePic(c: Context) = c.ds.data.map { it[PROFILE_PIC] ?: "" }
+    fun profileBanner(c: Context) = c.ds.data.map { it[PROFILE_BANNER] ?: "" }
+    fun profileBio(c: Context) = c.ds.data.map { it[PROFILE_BIO] ?: "" }
+    fun profilePronouns(c: Context) = c.ds.data.map { it[PROFILE_PRONOUNS] ?: "" }
+    fun favSong(c: Context) = c.ds.data.map { it[FAV_SONG] ?: "" }
     fun fontName(c: Context) = c.ds.data.map { it[FONT_NAME] ?: "DM Mono" }
     fun onboarded(c: Context) = c.ds.data.map { it[ONBOARDED] ?: false }
     suspend fun setOnboarded(c: Context, v: Boolean) = c.ds.edit { it[ONBOARDED] = v }
@@ -49,9 +60,19 @@ object Prefs {
     suspend fun setUpdateCheck(c: Context, v: Boolean) = c.ds.edit { it[UPDATE_CHECK] = v }
     fun playCountPct(c: Context) = c.ds.data.map { it[PLAY_COUNT_PCT] ?: 20 }
     suspend fun setPlayCountPct(c: Context, v: Int) = c.ds.edit { it[PLAY_COUNT_PCT] = v }
+    fun skipSilence(c: Context) = c.ds.data.map { it[SKIP_SILENCE] ?: false }
+    suspend fun setSkipSilence(c: Context, v: Boolean) = c.ds.edit { it[SKIP_SILENCE] = v }
+    fun crossfadeMs(c: Context) = c.ds.data.map { it[CROSSFADE_MS] ?: 0 }
+    suspend fun setCrossfadeMs(c: Context, v: Int) = c.ds.edit { it[CROSSFADE_MS] = v }
+    fun keepScreenOn(c: Context) = c.ds.data.map { it[KEEP_SCREEN_ON] ?: true }
+    suspend fun setKeepScreenOn(c: Context, v: Boolean) = c.ds.edit { it[KEEP_SCREEN_ON] = v }
     suspend fun setWelcome(c: Context, v: String) = c.ds.edit { it[WELCOME] = v }
     suspend fun setProfileName(c: Context, v: String) = c.ds.edit { it[PROFILE_NAME] = v }
     suspend fun setProfilePic(c: Context, v: String) = c.ds.edit { it[PROFILE_PIC] = v }
+    suspend fun setProfileBanner(c: Context, v: String) = c.ds.edit { it[PROFILE_BANNER] = v }
+    suspend fun setProfileBio(c: Context, v: String) = c.ds.edit { it[PROFILE_BIO] = v }
+    suspend fun setProfilePronouns(c: Context, v: String) = c.ds.edit { it[PROFILE_PRONOUNS] = v }
+    suspend fun setFavSong(c: Context, v: String) = c.ds.edit { it[FAV_SONG] = v }
     suspend fun setFontName(c: Context, v: String) = c.ds.edit { it[FONT_NAME] = v }
 
     suspend fun setTheme(c: Context, v: String) = c.ds.edit { it[THEME] = v }

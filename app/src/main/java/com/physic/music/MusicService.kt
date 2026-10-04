@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MusicService : MediaSessionService() {
@@ -36,6 +37,7 @@ class MusicService : MediaSessionService() {
     }
 
     private var countedSong: String? = null
+    private var currentCrossfadeMs: Int = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -43,6 +45,8 @@ class MusicService : MediaSessionService() {
         nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Playback", NotificationManager.IMPORTANCE_LOW))
         player = ExoPlayer.Builder(this).build().also { Playback.player = it }
         scope.launch { Prefs.pauseUnplug(applicationContext).collect { player?.setHandleAudioBecomingNoisy(it) } }
+        scope.launch { Prefs.skipSilence(applicationContext).collect { player?.setSkipSilenceEnabled(it) } }
+        scope.launch { Prefs.crossfadeMs(applicationContext).collect { currentCrossfadeMs = it } }
         session = MediaSession.Builder(this, player!!)
             .setSessionActivity(
                 PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
@@ -56,6 +60,17 @@ class MusicService : MediaSessionService() {
                 countedSong = null
                 updateWidget()
                 updateNotification()
+                val fade = currentCrossfadeMs
+                if (fade > 0) {
+                    player?.volume = 0f
+                    scope.launch {
+                        for (i in 1..10) {
+                            kotlinx.coroutines.delay((fade / 10).toLong())
+                            try { player?.volume = i / 10f } catch (_: Exception) {}
+                        }
+                        try { player?.volume = 1f } catch (_: Exception) {}
+                    }
+                }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 Playback.playing.value = isPlaying
@@ -173,5 +188,11 @@ object Playback {
         ).build() }, startIndex, 0)
         p.prepare()
         p.play()
+        p.shuffleModeEnabled = kotlinx.coroutines.runBlocking { Prefs.shuffle(context).first() }
+        p.repeatMode = when (kotlinx.coroutines.runBlocking { Prefs.repeat(context).first() }) {
+            1 -> androidx.media3.common.Player.REPEAT_MODE_ALL
+            2 -> androidx.media3.common.Player.REPEAT_MODE_ONE
+            else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+        }
     }
 }

@@ -131,6 +131,14 @@ fun PhysicApp() {
             }
         }
     }
+    val keepScreenOn by Prefs.keepScreenOn(c).collectAsState(initial = true)
+    val activity = c as? android.app.Activity
+    LaunchedEffect(keepScreenOn) {
+        activity?.window?.let {
+            if (keepScreenOn) it.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
     val onboarded by Prefs.onboarded(c).collectAsState(initial = false)
     if (!onboarded) {
         Surface(Modifier.fillMaxSize(), color = theme.bg) {
@@ -252,6 +260,8 @@ fun PhysicApp() {
                                     }
                                 })
                         }
+                        val upNext = Playback.queue.value.drop((Playback.player?.currentMediaItemIndex ?: 0) + 1).take(3).joinToString(" · ") { it.title }
+                        if (upNext.isNotEmpty()) Text("up next: $upNext", color = theme.subtext, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         LyricsBlock(theme, pos)
                     }
                 }
@@ -306,6 +316,8 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
     val scope = rememberCoroutineScope()
     var editWelcome by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf(false) }
+    var editBio by remember { mutableStateOf(false) }
+    var editPronouns by remember { mutableStateOf(false) }
     var welcomeField by remember(welcome) { mutableStateOf(welcome) }
     var nameField by remember(profileName) { mutableStateOf(profileName) }
     val topSongs = remember(songs) { Stats.topSongs(c) }
@@ -321,8 +333,25 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         }
     }
 
+    val banner by Prefs.profileBanner(c).collectAsState(initial = "")
+    val bio by Prefs.profileBio(c).collectAsState(initial = "")
+    val pronouns by Prefs.profilePronouns(c).collectAsState(initial = "")
+    val fav by Prefs.favSong(c).collectAsState(initial = "")
+
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val pickBanner = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                try { c.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) {}
+                scope.launch { Prefs.setProfileBanner(c, uri.toString()) }
+            }
+        }
         Panel("profile", theme, shape = shape) {
+            if (banner.isNotEmpty()) {
+                AsyncImage(model = banner, contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().height(80.dp).clip(shape),
+                    contentScale = ContentScale.Crop)
+                Spacer(Modifier.height(6.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (profilePic.isNotEmpty()) {
                     AsyncImage(model = profilePic, contentDescription = null,
@@ -339,6 +368,17 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 }
                 Text(L.tr("[set pfp]"), color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickPfp.launch("image/*") })
             }
+            if (pronouns.isNotEmpty()) Text("($pronouns)", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
+            if (bio.isNotEmpty()) Text(bio, color = theme.text, fontSize = 13.sp, modifier = Modifier.clickable { editBio = true })
+            val curIdx = Playback.player?.currentMediaItemIndex ?: -1
+            val curSong = Playback.queue.value.getOrNull(curIdx)
+            if (fav.isNotEmpty()) Text("favorite: $fav", color = theme.subtext, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("[set banner]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickBanner.launch("image/*") })
+                Text("[set pronouns]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
+                Text("[set bio]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editBio = true })
+                if (curSong != null) Text("[set favorite = now playing]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { scope.launch { Prefs.setFavSong(c, curSong.title) } })
+            }
         }
 
         Panel("welcome — tap to edit", theme, shape = shape) {
@@ -347,6 +387,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
 
         Panel("most played", theme, shape = shape) {
             if (topSongList.isEmpty()) Text(L.tr("no plays yet"), color = theme.subtext, fontSize = 13.sp)
+            Text("${songs.size} songs · ${albums.size} albums in library", color = theme.subtext, fontSize = 11.sp)
             topSongList.take(5).forEachIndexed { i, s ->
                 Row(Modifier.fillMaxWidth().clickable { Playback.play(c, topSongList, i) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(34.dp).clip(shape))
@@ -398,6 +439,20 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         title = { Text(L.tr("edit name")) },
         text = { OutlinedTextField(value = nameField, onValueChange = { nameField = it }) },
         confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileName(c, nameField); editName = false } }) { Text(L.tr("ok")) } }
+    )
+    var bioField by remember(bio) { mutableStateOf(bio) }
+    var pronounsField by remember(pronouns) { mutableStateOf(pronouns) }
+    if (editBio) AlertDialog(
+        onDismissRequest = { editBio = false },
+        title = { Text("edit bio") },
+        text = { OutlinedTextField(value = bioField, onValueChange = { bioField = it }) },
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileBio(c, bioField); editBio = false } }) { Text(L.tr("ok")) } }
+    )
+    if (editPronouns) AlertDialog(
+        onDismissRequest = { editPronouns = false },
+        title = { Text("edit pronouns") },
+        text = { OutlinedTextField(value = pronounsField, onValueChange = { pronounsField = it }) },
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfilePronouns(c, pronounsField); editPronouns = false } }) { Text(L.tr("ok")) } }
     )
 }
 
@@ -457,7 +512,17 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
 
 fun formatTime(ms: Long): String {
     val s = ms / 1000
-    return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "$h:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}"
+           else "$m:${sec.toString().padStart(2, '0')}"
+}
+
+fun humanTime(ms: Long): String {
+    val h = ms / 3600000
+    val m = (ms % 3600000) / 60000
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
 @Composable
@@ -480,7 +545,7 @@ fun AlbumsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) 
                         Column {
                             Text(name, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val year = list.mapNotNull { it.year.toIntOrNull() }.minOrNull()
-                            Text("${list.first().artist} · ${year ?: "?"} · ${list.size} tracks · ${formatTime(list.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
+                            Text("${list.first().artist} · ${year ?: "?"} · ${list.size} tracks · ${humanTime(list.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
                         }
                     }
                 }
@@ -525,7 +590,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(selectedArtist!!, color = theme.text, fontSize = 18.sp)
-                        Text("${list.size} songs · ${formatTime(list.sumOf { it.durationMs })} · [change img]", color = theme.subtext, fontSize = 12.sp,
+                        Text("${list.size} songs · ${humanTime(list.sumOf { it.durationMs })} · [change img]", color = theme.subtext, fontSize = 12.sp,
                             modifier = Modifier.clickable { pickImg.launch("image/*") })
                     }
                 }
@@ -536,7 +601,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(album, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${albumSongs.mapNotNull { it.year.toIntOrNull() }.minOrNull() ?: "?"} · ${albumSongs.size} tracks · ${formatTime(albumSongs.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
+                            Text("${albumSongs.mapNotNull { it.year.toIntOrNull() }.minOrNull() ?: "?"} · ${albumSongs.size} tracks · ${humanTime(albumSongs.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
                         }
                     }
                 }
@@ -553,7 +618,7 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(name, color = theme.text)
-                                Text("${list.size} songs · ${formatTime(list.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
+                                Text("${list.size} songs · ${humanTime(list.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
                             }
                         }
                     }
@@ -804,6 +869,24 @@ fun SettingsTab(
                     onValueChange = { v -> scope.launch { Prefs.setPlayCountPct(c, v.toInt().coerceIn(1, 99)) } },
                     valueRange = 1f..99f,
                     colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("skip silence in tracks", color = theme.text, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                val skipSilence by Prefs.skipSilence(c).collectAsState(initial = false)
+                Switch(checked = skipSilence, onCheckedChange = { scope.launch { Prefs.setSkipSilence(c, it); Playback.player?.setSkipSilenceEnabled(it) } })
+            }
+            Column {
+                val crossfadeMs by Prefs.crossfadeMs(c).collectAsState(initial = 0)
+                Text("crossfade (fade-in): ${crossfadeMs}ms", color = theme.text, fontSize = 13.sp)
+                Slider(value = crossfadeMs.toFloat(),
+                    onValueChange = { v -> scope.launch { Prefs.setCrossfadeMs(c, v.toInt().coerceIn(0, 8000)) } },
+                    valueRange = 0f..8000f,
+                    colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("keep screen on", color = theme.text, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                val keepScreenOn by Prefs.keepScreenOn(c).collectAsState(initial = true)
+                Switch(checked = keepScreenOn, onCheckedChange = { scope.launch { Prefs.setKeepScreenOn(c, it) } })
             }
         }
 
