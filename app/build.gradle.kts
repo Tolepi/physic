@@ -10,8 +10,8 @@ android {
         applicationId = "com.physic.music"
         minSdk = 26
         targetSdk = 34
-        versionCode = 150
-        versionName = "1.5.0"
+        versionCode = 151
+        versionName = "1.5.1"
     }
     signingConfigs {
         create("release") {
@@ -41,6 +41,8 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")
+    implementation("io.coil-kt:coil-svg:2.6.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -160,8 +160,19 @@ fun PhysicApp() {
         return
     }
 
-    Surface(Modifier.fillMaxSize(), color = theme.bg) {
+    val bgImg by Prefs.customBgImg(c).collectAsState(initial = "")
+    Box(Modifier.fillMaxSize().background(theme.bg)) {
+        if (bgImg.isNotEmpty()) AsyncImage(model = bgImg, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
         ProvideTextStyle(TextStyle(fontFamily = fontFamily)) {
+            val imageLoader = remember {
+                coil.ImageLoader.Builder(c)
+                    .components {
+                        add(coil.decode.GifDecoder.Factory())
+                        add(coil.decode.SvgDecoder.Factory())
+                    }
+                    .build()
+            }
+            CompositionLocalProvider(coil.compose.LocalImageLoader provides imageLoader) {
             val welcome by Prefs.welcome(c).collectAsState(initial = "Welcome back.")
             val profileName by Prefs.profileName(c).collectAsState(initial = "listener")
             val profilePic by Prefs.profilePic(c).collectAsState(initial = "")
@@ -221,7 +232,14 @@ fun PhysicApp() {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (cur != null) {
                                 val npSize by Prefs.npSize(c).collectAsState(initial = 52)
-                                SpinningDisc(sizeDp = npSize / 2)
+                                val customDisc by Prefs.customDisc(c).collectAsState(initial = "")
+                                if (customDisc.isNotEmpty()) {
+                                    val discAnim = rememberInfiniteTransition()
+                                    val discRot by discAnim.animateFloat(0f, 360f, infiniteRepeatable(tween(3500, easing = LinearEasing)))
+                                    androidx.compose.foundation.Image(painter = coil.compose.rememberAsyncImagePainter(model = customDisc), contentDescription = null, modifier = Modifier.size((npSize / 2).dp).clip(RoundedCornerShape(4.dp)).graphicsLayer { rotationZ = discRot }, contentScale = ContentScale.Crop)
+                                } else {
+                                    SpinningDisc(sizeDp = npSize / 2)
+                                }
                                 Spacer(Modifier.width(8.dp))
                                 AsyncImage(
                                     model = albumArtUri(cur), contentDescription = null,
@@ -289,6 +307,7 @@ fun PhysicApp() {
         }
     }
 }
+}
 
 @Composable
 fun LyricsBlock(theme: ThemeColors, posMs: Float) {
@@ -325,12 +344,28 @@ fun LyricsBlock(theme: ThemeColors, posMs: Float) {
 fun SpinningDisc(sizeDp: Int) {
     val anim = rememberInfiniteTransition()
     val rot by anim.animateFloat(0f, 360f, infiniteRepeatable(tween(3500, easing = LinearEasing)))
-    Canvas(Modifier.size(sizeDp.dp).graphicsLayer { rotationZ = rot }) {
+    Canvas(Modifier.size(sizeDp.dp).padding(horizontal = 4.dp).graphicsLayer { rotationZ = rot }) {
+        val rows = listOf(
+            "..####..",
+            ".######.",
+            "########",
+            "###..###",
+            "###..###",
+            "########",
+            ".######.",
+            "..####.."
+        )
         val s = size.minDimension
-        drawCircle(Color.Black, s / 2f)
-        drawCircle(Color(0xFF5A5A5A), s / 4f)
-        drawCircle(Color.White, s / 8f)
-        drawRect(Color.White.copy(alpha = 0.6f), androidx.compose.ui.geometry.Offset(s / 2f - s / 16f, 0f), androidx.compose.ui.geometry.Size(s / 8f, s / 8f))
+        val px = s / 8f
+        rows.forEachIndexed { r, row ->
+            row.forEachIndexed { c, ch ->
+                if (ch == '#') drawRect(Color(0xFF141414), androidx.compose.ui.geometry.Offset(c * px, r * px), androidx.compose.ui.geometry.Size(px, px))
+            }
+        }
+        // centre hole
+        drawRect(Color.White, androidx.compose.ui.geometry.Offset(3 * px, 3 * px), androidx.compose.ui.geometry.Size(2 * px, 2 * px))
+        // groove-highlight accent that shows rotation
+        drawRect(Color(0xFF5A5A5A), androidx.compose.ui.geometry.Offset(6 * px, 1 * px), androidx.compose.ui.geometry.Size(px, px))
     }
 }
 
@@ -351,6 +386,8 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
     var editName by remember { mutableStateOf(false) }
     var editBio by remember { mutableStateOf(false) }
     var editPronouns by remember { mutableStateOf(false) }
+    var editLocation by remember { mutableStateOf(false) }
+    var editFavAlbum by remember { mutableStateOf(false) }
     var welcomeField by remember(welcome) { mutableStateOf(welcome) }
     var nameField by remember(profileName) { mutableStateOf(profileName) }
     val topSongs = remember(songs) { Stats.topSongs(c) }
@@ -402,15 +439,22 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 Text(L.tr("[set pfp]"), color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickPfp.launch("image/*") })
             }
             if (pronouns.isNotEmpty()) Text("($pronouns)", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
+            val location by Prefs.profileLocation(c).collectAsState(initial = "")
+            val favAlbum by Prefs.profileFavAlbum(c).collectAsState(initial = "")
+            var locationField by remember(location) { mutableStateOf(location) }
+            var favAlbumField by remember(favAlbum) { mutableStateOf(favAlbum) }
+            if (location.isNotEmpty()) Text("📍 $location", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
+            if (favAlbum.isNotEmpty()) Text("★ fav album: $favAlbum", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
             if (bio.isNotEmpty()) Text(bio, color = theme.text, fontSize = 13.sp, modifier = Modifier.clickable { editBio = true })
             val curIdx = Playback.player?.currentMediaItemIndex ?: -1
             val curSong = Playback.queue.value.getOrNull(curIdx)
-            if (fav.isNotEmpty()) Text("favorite: $fav", color = theme.subtext, fontSize = 12.sp)
+            if (fav.isNotEmpty()) Text("★ favorite: $fav", color = theme.subtext, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("[set banner]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickBanner.launch("image/*") })
-                Text("[set pronouns]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
-                Text("[set bio]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editBio = true })
-                if (curSong != null) Text("[set favorite = now playing]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { scope.launch { Prefs.setFavSong(c, curSong.title) } })
+                Text("[banner]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickBanner.launch("image/*") })
+                Text("[pronouns]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
+                Text("[location]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
+                Text("[fav album]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
+                Text("[bio]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editBio = true })
             }
         }
 
@@ -494,6 +538,22 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         title = { Text("edit pronouns") },
         text = { OutlinedTextField(value = pronounsField, onValueChange = { pronounsField = it }) },
         confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfilePronouns(c, pronounsField); editPronouns = false } }) { Text(L.tr("ok")) } }
+    )
+    val location by Prefs.profileLocation(c).collectAsState(initial = "")
+    val favAlbum by Prefs.profileFavAlbum(c).collectAsState(initial = "")
+    var locationField by remember(location) { mutableStateOf(location) }
+    var favAlbumField by remember(favAlbum) { mutableStateOf(favAlbum) }
+    if (editLocation) AlertDialog(
+        onDismissRequest = { editLocation = false },
+        title = { Text("edit location") },
+        text = { OutlinedTextField(value = locationField, onValueChange = { locationField = it }) },
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileLocation(c, locationField); editLocation = false } }) { Text(L.tr("ok")) } }
+    )
+    if (editFavAlbum) AlertDialog(
+        onDismissRequest = { editFavAlbum = false },
+        title = { Text("edit favorite album") },
+        text = { OutlinedTextField(value = favAlbumField, onValueChange = { favAlbumField = it }) },
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileFavAlbum(c, favAlbumField); editFavAlbum = false } }) { Text(L.tr("ok")) } }
     )
 }
 
@@ -1049,6 +1109,32 @@ fun SettingsTab(
             Text("now playing cover: ${npSize}dp", color = theme.text, fontSize = 13.sp)
             Slider(value = npSize.toFloat(), onValueChange = { v -> scope.launch { Prefs.setNpSize(c, v.toInt().coerceIn(32, 96)) } }, valueRange = 32f..96f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+
+            val customDisc by Prefs.customDisc(c).collectAsState(initial = "")
+            val pickDisc = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                if (uri != null) {
+                    try { c.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) {}
+                    scope.launch { Prefs.setCustomDisc(c, uri.toString()) }
+                }
+            }
+            Text("custom disc icon: ${if (customDisc.isEmpty()) "none (pixel-art default)" else "custom set"}", color = theme.text, fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { pickDisc.launch("image/*") }) { Text("[ pick svg/gif/png ]") }
+                if (customDisc.isNotEmpty()) TextButton(onClick = { scope.launch { Prefs.setCustomDisc(c, "") } }) { Text("[ clear ]") }
+            }
+
+            Text("background image (custom theme)", color = theme.text, fontSize = 13.sp)
+            val customBgImg by Prefs.customBgImg(c).collectAsState(initial = "")
+            val pickBg = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                if (uri != null) {
+                    try { c.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) {}
+                    scope.launch { Prefs.setCustomBgImg(c, uri.toString()) }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { pickBg.launch("image/*") }) { Text("[ pick bg ]") }
+                if (customBgImg.isNotEmpty()) TextButton(onClick = { scope.launch { Prefs.setCustomBgImg(c, "") } }) { Text("[ clear ]") }
+            }
         }
     }
 }

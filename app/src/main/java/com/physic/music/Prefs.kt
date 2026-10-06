@@ -30,6 +30,10 @@ object Prefs {
     private val PROFILE_BIO = stringPreferencesKey("profile_bio")
     private val PROFILE_PRONOUNS = stringPreferencesKey("profile_pronouns")
     private val FAV_SONG = stringPreferencesKey("fav_song")
+    private val CUSTOM_DISC = stringPreferencesKey("custom_disc")
+    private val CUSTOM_BG_IMG = stringPreferencesKey("custom_bg_img")
+    private val PROFILE_LOCATION = stringPreferencesKey("profile_location")
+    private val PROFILE_FAV_ALBUM = stringPreferencesKey("profile_fav_album")
     private val FONT_NAME = stringPreferencesKey("font_name")
     private val ONBOARDED = booleanPreferencesKey("onboarded")
     private val PAUSE_UNPLUG = booleanPreferencesKey("pause_unplug")
@@ -57,6 +61,10 @@ object Prefs {
     fun profileBio(c: Context) = c.ds.data.map { it[PROFILE_BIO] ?: "" }
     fun profilePronouns(c: Context) = c.ds.data.map { it[PROFILE_PRONOUNS] ?: "" }
     fun favSong(c: Context) = c.ds.data.map { it[FAV_SONG] ?: "" }
+    fun customDisc(c: Context) = c.ds.data.map { it[CUSTOM_DISC] ?: "" }
+    fun customBgImg(c: Context) = c.ds.data.map { it[CUSTOM_BG_IMG] ?: "" }
+    fun profileLocation(c: Context) = c.ds.data.map { it[PROFILE_LOCATION] ?: "" }
+    fun profileFavAlbum(c: Context) = c.ds.data.map { it[PROFILE_FAV_ALBUM] ?: "" }
     fun fontName(c: Context) = c.ds.data.map { it[FONT_NAME] ?: "DM Mono" }
     fun onboarded(c: Context) = c.ds.data.map { it[ONBOARDED] ?: false }
     suspend fun setOnboarded(c: Context, v: Boolean) = c.ds.edit { it[ONBOARDED] = v }
@@ -85,6 +93,10 @@ object Prefs {
     suspend fun setProfileBio(c: Context, v: String) = c.ds.edit { it[PROFILE_BIO] = v }
     suspend fun setProfilePronouns(c: Context, v: String) = c.ds.edit { it[PROFILE_PRONOUNS] = v }
     suspend fun setFavSong(c: Context, v: String) = c.ds.edit { it[FAV_SONG] = v }
+    suspend fun setCustomDisc(c: Context, v: String) = c.ds.edit { it[CUSTOM_DISC] = v }
+    suspend fun setCustomBgImg(c: Context, v: String) = c.ds.edit { it[CUSTOM_BG_IMG] = v }
+    suspend fun setProfileLocation(c: Context, v: String) = c.ds.edit { it[PROFILE_LOCATION] = v }
+    suspend fun setProfileFavAlbum(c: Context, v: String) = c.ds.edit { it[PROFILE_FAV_ALBUM] = v }
     suspend fun setFontName(c: Context, v: String) = c.ds.edit { it[FONT_NAME] = v }
 
     suspend fun setTheme(c: Context, v: String) = c.ds.edit { it[THEME] = v }
