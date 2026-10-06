@@ -17,6 +17,7 @@ data class Song(
     val dateAdded: Long = 0,
     val year: String = "",
     val track: Int = 0,
+    val coverOverride: String? = null,
 )
 
 object MusicIndex {
@@ -69,12 +70,13 @@ object MusicIndex {
                 val id = cur.getLong(0)
                 val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
                 out.add(
-                    Song(
+                    Meta.apply(c, Song(
                         id, cur.getString(1) ?: "?", cur.getString(2) ?: "?",
                         cur.getString(3) ?: "?", cur.getLong(7), uri, cur.getString(4) ?: "", cur.getLong(5),
                         cur.getLong(8), (cur.getLong(9)).let { if (it in 1L..9999L) it.toString() else "" },
-                        cur.getInt(10)
-                    )
+                        cur.getInt(10),
+                        Meta.get(c, cur.getString(4) ?: "")?.optString("cover", "")?.ifEmpty { null },
+                    ) )
                 )
             }
         }

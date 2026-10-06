@@ -15,6 +15,9 @@ object Prefs {
     private val CUSTOM_BG = stringPreferencesKey("custom_bg")
     private val CUSTOM_ACCENT = stringPreferencesKey("custom_accent")
     private val CUSTOM_TEXT = stringPreferencesKey("custom_text")
+    private val CUSTOM_SURFACE = stringPreferencesKey("custom_surface")
+    private val CUSTOM_SUBTEXT = stringPreferencesKey("custom_subtext")
+    private val CUSTOM_BORDER = stringPreferencesKey("custom_border")
     private val ROUNDED = booleanPreferencesKey("rounded")
     private val FOLDERS = stringPreferencesKey("folders")
     private val SHUFFLE = booleanPreferencesKey("shuffle")
@@ -45,7 +48,7 @@ object Prefs {
     fun shuffle(c: Context) = c.ds.data.map { it[SHUFFLE] ?: false }
     fun repeat(c: Context) = c.ds.data.map { it[REPEAT] ?: 0 }
     fun custom(c: Context) = c.ds.data.map {
-        Triple(it[CUSTOM_BG], it[CUSTOM_ACCENT], it[CUSTOM_TEXT])
+        listOf(it[CUSTOM_BG], it[CUSTOM_SURFACE], it[CUSTOM_TEXT], it[CUSTOM_SUBTEXT], it[CUSTOM_ACCENT], it[CUSTOM_BORDER])
     }
     fun welcome(c: Context) = c.ds.data.map { it[WELCOME] ?: "Welcome back." }
     fun profileName(c: Context) = c.ds.data.map { it[PROFILE_NAME] ?: "listener" }
@@ -89,10 +92,13 @@ object Prefs {
     suspend fun setFolders(c: Context, v: Set<String>) = c.ds.edit { it[FOLDERS] = v.joinToString("\n") }
     suspend fun setShuffle(c: Context, v: Boolean) = c.ds.edit { it[SHUFFLE] = v }
     suspend fun setRepeat(c: Context, v: Int) = c.ds.edit { it[REPEAT] = v }
-    suspend fun setCustom(c: Context, bg: String?, accent: String?, text: String?) = c.ds.edit {
+    suspend fun setCustom(c: Context, bg: String?, surface: String?, text: String?, subtext: String?, accent: String?, border: String?) = c.ds.edit {
         if (bg != null) it[CUSTOM_BG] = bg
-        if (accent != null) it[CUSTOM_ACCENT] = accent
+        if (surface != null) it[CUSTOM_SURFACE] = surface
         if (text != null) it[CUSTOM_TEXT] = text
+        if (subtext != null) it[CUSTOM_SUBTEXT] = subtext
+        if (accent != null) it[CUSTOM_ACCENT] = accent
+        if (border != null) it[CUSTOM_BORDER] = border
     }
 
     fun artistImage(c: Context, artist: String) =
