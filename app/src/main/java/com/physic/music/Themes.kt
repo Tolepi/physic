@@ -53,7 +53,7 @@ object Themes {
         ThemeColors("Sakura Light", Color(0xFFFFF0F5), Color(0xFFFCE4EC), Color(0xFF6D2E52), Color(0xFFA8698D), Color(0xFFD81B60)),
         ThemeColors("Paper", Color(0xFFFFFBF2), Color(0xFFF5EFE0), Color(0xFF2B2B2B), Color(0xFF8A8A8A), Color(0xFF3366FF)),
         ThemeColors("Gentoo", Color(0xFF1A1A1E), Color(0xFF2A2A35), Color(0xFFF2F0F5), Color(0xFFB0A8C0), Color(0xFF9B7ED9)),
-        ThemeColors("Bodypop", Color(0xFF102236), Color(0xFF142C42), Color(0xFFE8F1F2), Color(0xFF86A8C1), Color(0xFFF7D038)),
+        ThemeColors("Bodypop", Color(0xFF000000), Color(0xFF1A1A1A), Color(0xFFFFFFFF), Color(0xFFA3A3A3), Color(0xFFFF8000)),
     )
     fun byName(name: String?) = all.firstOrNull { it.name == name } ?: all.first()
 }
