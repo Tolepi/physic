@@ -64,7 +64,7 @@ fun EqualizerTab(theme: ThemeColors) {
                         val freqLabel = if (freqHz < 1000) "${freqHz}Hz" else "${freqHz / 1000}kHz"
                         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(freqLabel, color = theme.text, fontSize = 11.sp)
-                            Box(modifier = Modifier.fillMaxWidth(0.6f).height(180.dp)) {
+                            Box(modifier = Modifier.fillMaxWidth(0.6f).height(280.dp)) {
                                 Slider(
                                     value = level.toFloat(),
                                     valueRange = range[0].toFloat()..range[1].toFloat(),
