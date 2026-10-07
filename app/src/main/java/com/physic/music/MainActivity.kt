@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -229,7 +230,14 @@ fun PhysicApp() {
                 // ---- now playing panel ----
                 if (title.isNotEmpty()) {
                     val cur = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: 0)
-                    Column(Modifier.fillMaxWidth().border(1.dp, theme.border, shape).background(theme.surface, shape).padding(10.dp)) {
+                    Column(Modifier.fillMaxWidth().heightIn(min = 140.dp).border(1.dp, theme.border, shape).background(theme.surface, shape).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Now playing!", color = theme.accent, fontSize = 12.sp)
+                            val favSong by Prefs.favSong(c).collectAsState(initial = "")
+                            val curSongTitle = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: -1)?.title ?: ""
+                            Text("★", color = if (favSong == curSongTitle && curSongTitle.isNotEmpty()) theme.accent else theme.subtext, fontSize = 28.sp,
+                                modifier = Modifier.clickable { if (curSongTitle.isNotEmpty()) scope.launch { Prefs.setFavSong(c, if (favSong == curSongTitle) "" else curSongTitle) } })
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (cur != null) {
                                 val npSize by Prefs.npSize(c).collectAsState(initial = 52)
@@ -249,8 +257,10 @@ fun PhysicApp() {
                                 Spacer(Modifier.width(10.dp))
                             }
                             Column(Modifier.weight(1f)) {
-                                Text(title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(artist, color = theme.subtext, fontSize = 12.sp, maxLines = 1)
+                                Text(title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.basicMarquee())
+                                Text(artist, color = theme.subtext, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.basicMarquee())
                             }
                         }
                         val dur = (Playback.player?.duration?.toFloat() ?: 1f).coerceAtLeast(1f)
@@ -263,7 +273,7 @@ fun PhysicApp() {
                                 inactiveTrackColor = theme.border
                             )
                         )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Shuffle, "shuffle", tint = if (shuffleOn) theme.accent else theme.subtext,
                                 modifier = Modifier.clickable {
                                     scope.launch { Prefs.setShuffle(c, !shuffleOn); Playback.player?.shuffleModeEnabled = !shuffleOn }
@@ -294,10 +304,6 @@ fun PhysicApp() {
                                         }
                                     }
                                 })
-                            val favSong by Prefs.favSong(c).collectAsState(initial = "")
-                            val curSongTitle = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: -1)?.title ?: ""
-                            Text("★", color = if (favSong == curSongTitle && curSongTitle.isNotEmpty()) theme.accent else theme.subtext, fontSize = 22.sp,
-                                modifier = Modifier.clickable { scope.launch { Prefs.setFavSong(c, if (favSong == curSongTitle) "" else curSongTitle) } }.padding(start = 8.dp))
                         }
                         val upNext = Playback.queue.value.drop((Playback.player?.currentMediaItemIndex ?: 0) + 1).take(3).joinToString(" · ") { it.title }
                         if (upNext.isNotEmpty()) Text("up next: $upNext", color = theme.subtext, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
