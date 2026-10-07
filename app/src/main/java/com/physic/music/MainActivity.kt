@@ -1035,22 +1035,41 @@ fun SettingsTab(
                     Text("saved themes:", color = theme.subtext, fontSize = 11.sp)
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
                         savedNames.forEach { name ->
-                            Surface(
-                                Modifier.padding(end = 8.dp, bottom = 4.dp).clickable {
-                                    val j = try { org.json.JSONObject(existing) } catch (e: Exception) { org.json.JSONObject() }
-                                    val list = j.optString(name, "").split("|")
-                                    if (list.size >= 6) {
-                                        scope.launch {
-                                            Prefs.setCustom(c, "#" + list[0], "#" + list[1], "#" + list[2], "#" + list[3], "#" + list[4], "#" + list[5])
+                            var confirmDelete by remember { mutableStateOf(false) }
+                            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    Modifier.padding(end = 4.dp, bottom = 4.dp).clickable {
+                                        val j = try { org.json.JSONObject(existing) } catch (e: Exception) { org.json.JSONObject() }
+                                        val list = j.optString(name, "").split("|")
+                                        if (list.size >= 6) {
+                                            scope.launch {
+                                                Prefs.setCustom(c, "#" + list[0], "#" + list[1], "#" + list[2], "#" + list[3], "#" + list[4], "#" + list[5])
+                                            }
                                         }
-                                    }
-                                },
-                                color = theme.surface,
-                                shape = RoundedCornerShape(0.dp)
-                            ) { Text(name, color = theme.text, modifier = Modifier.padding(8.dp), fontSize = 11.sp) }
+                                    },
+                                    color = theme.surface,
+                                    shape = RoundedCornerShape(0.dp)
+                                ) { Text(name, color = theme.text, modifier = Modifier.padding(8.dp), fontSize = 11.sp) }
+                                Text("✕", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { confirmDelete = true }.padding(end = 8.dp, bottom = 4.dp))
+                            }
+                            if (confirmDelete) {
+                                AlertDialog(
+                                    onDismissRequest = { confirmDelete = false },
+                                    title = { Text("delete theme?") },
+                                    text = { Text("Delete saved theme \"$name\"?") },
+                                    confirmButton = { TextButton(onClick = {
+                                        val j = try { org.json.JSONObject(existing) } catch (e: Exception) { org.json.JSONObject() }
+                                        j.remove(name)
+                                        scope.launch { Prefs.setSavedCustomThemes(c, j.toString()) }
+                                        confirmDelete = false
+                                    }) { Text("delete") } },
+                                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("cancel") } }
+                                )
+                            }
                         }
                     }
                 }
+                Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customSurface, customText, customSubtext, customAccent, customBorder) } }) { Text(L.tr("apply")) }
             }
         }
 

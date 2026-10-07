@@ -56,18 +56,15 @@ fun EqualizerTab(theme: ThemeColors) {
             val numBands = e.numberOfBands.toInt()
             val range = e.bandLevelRange
             if (vertical) {
-                Row(
-                    Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                Row(Modifier.fillMaxWidth()) {
                     for (b in 0 until numBands) {
                         val band = b.toShort()
                         var level by remember(band) { mutableStateOf(e.getBandLevel(band).toInt()) }
                         val freqHz = e.getCenterFreq(band) / 1000
                         val freqLabel = if (freqHz < 1000) "${freqHz}Hz" else "${freqHz / 1000}kHz"
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(freqLabel, color = theme.text, fontSize = 11.sp)
-                            Box(modifier = Modifier.width(80.dp).height(200.dp)) {
+                            Box(modifier = Modifier.fillMaxWidth(0.6f).height(180.dp)) {
                                 Slider(
                                     value = level.toFloat(),
                                     valueRange = range[0].toFloat()..range[1].toFloat(),
