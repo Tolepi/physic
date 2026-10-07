@@ -17,11 +17,12 @@ object Themes {
     val all = listOf(
         ThemeColors(
             "System24",
-            bg = Color(0xFF242424),
-            surface = Color(0xFF2E2E2E),
-            text = Color(0xFFF2F2F2),
-            subtext = Color(0xFFA6A6A6),
-            accent = Color(0xFFC6A8E8),        // purple-2 approx
+            bg = Color(0xFF262626),            // oklch(19% 0 0)
+            surface = Color(0xFF333333),       // oklch(23-27% 0 0)
+            text = Color(0xFFE6E6E6),          // oklch(90% 0 0)
+            subtext = Color(0xFF999999),       // oklch(60% 0 0)
+            accent = Color(0xFFB088E6),        // oklch(73% 0.12 300)
+            border = Color(0xFF404040),        // oklch(31% 0 0)
         ),
         ThemeColors(
             "AMOLED",

@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.LocalImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -172,7 +173,7 @@ fun PhysicApp() {
                     }
                     .build()
             }
-            CompositionLocalProvider(coil.compose.LocalImageLoader provides imageLoader) {
+            CompositionLocalProvider(LocalImageLoader provides imageLoader) {
             val welcome by Prefs.welcome(c).collectAsState(initial = "Welcome back.")
             val profileName by Prefs.profileName(c).collectAsState(initial = "listener")
             val profilePic by Prefs.profilePic(c).collectAsState(initial = "")
@@ -446,6 +447,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             if (location.isNotEmpty()) Text("📍 $location", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
             if (favAlbum.isNotEmpty()) Text("★ fav album: $favAlbum", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
             if (bio.isNotEmpty()) Text(bio, color = theme.text, fontSize = 13.sp, modifier = Modifier.clickable { editBio = true })
+            else Text("tap to add a bio…", color = theme.subtext, fontSize = 13.sp, modifier = Modifier.clickable { editBio = true })
             val curIdx = Playback.player?.currentMediaItemIndex ?: -1
             val curSong = Playback.queue.value.getOrNull(curIdx)
             if (fav.isNotEmpty()) Text("★ favorite: $fav", color = theme.subtext, fontSize = 12.sp)
@@ -454,7 +456,6 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 Text("[pronouns]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
                 Text("[location]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
                 Text("[fav album]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
-                Text("[bio]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editBio = true })
             }
         }
 
@@ -933,12 +934,13 @@ fun SettingsTab(
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     var allFolders by remember { mutableStateOf(setOf<String>()) }
-    var customBg by remember { mutableStateOf("#") }
-    var customAccent by remember { mutableStateOf("#") }
-    var customText by remember { mutableStateOf("#") }
-    var customSurface by remember { mutableStateOf("#") }
-    var customSubtext by remember { mutableStateOf("#") }
-    var customBorder by remember { mutableStateOf("#") }
+    val customState by Prefs.custom(c).collectAsState(initial = listOf(null, null, null, null, null, null))
+    var customBg by remember(customState) { mutableStateOf(customState.getOrNull(0) ?: "#") }
+    var customAccent by remember(customState) { mutableStateOf(customState.getOrNull(4) ?: "#") }
+    var customText by remember(customState) { mutableStateOf(customState.getOrNull(2) ?: "#") }
+    var customSurface by remember(customState) { mutableStateOf(customState.getOrNull(1) ?: "#") }
+    var customSubtext by remember(customState) { mutableStateOf(customState.getOrNull(3) ?: "#") }
+    var customBorder by remember(customState) { mutableStateOf(customState.getOrNull(5) ?: "#") }
     var fontUrl by remember { mutableStateOf("") }
     var fontMsg by remember { mutableStateOf("") }
     val fontName by Prefs.fontName(c).collectAsState(initial = "DM Mono")
