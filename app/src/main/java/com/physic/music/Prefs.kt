@@ -45,6 +45,8 @@ object Prefs {
     private val ROW_PAD = intPreferencesKey("row_pad")
     private val COVER_SIZE = intPreferencesKey("cover_size")
     private val NP_SIZE = intPreferencesKey("np_size")
+    private val EQ_VERTICAL = booleanPreferencesKey("eq_vertical")
+    private val SAVED_CUSTOM_THEMES = stringPreferencesKey("saved_custom_themes")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -86,6 +88,10 @@ object Prefs {
     suspend fun setCoverSize(c: Context, v: Int) = c.ds.edit { it[COVER_SIZE] = v }
     fun npSize(c: Context) = c.ds.data.map { it[NP_SIZE] ?: 52 }
     suspend fun setNpSize(c: Context, v: Int) = c.ds.edit { it[NP_SIZE] = v }
+    fun eqVertical(c: Context) = c.ds.data.map { it[EQ_VERTICAL] ?: false }
+    suspend fun setEqVertical(c: Context, v: Boolean) = c.ds.edit { it[EQ_VERTICAL] = v }
+    fun savedCustomThemes(c: Context) = c.ds.data.map { it[SAVED_CUSTOM_THEMES] ?: "{}" }
+    suspend fun setSavedCustomThemes(c: Context, v: String) = c.ds.edit { it[SAVED_CUSTOM_THEMES] = v }
     suspend fun setWelcome(c: Context, v: String) = c.ds.edit { it[WELCOME] = v }
     suspend fun setProfileName(c: Context, v: String) = c.ds.edit { it[PROFILE_NAME] = v }
     suspend fun setProfilePic(c: Context, v: String) = c.ds.edit { it[PROFILE_PIC] = v }

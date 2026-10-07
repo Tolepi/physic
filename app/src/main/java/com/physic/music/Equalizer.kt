@@ -3,12 +3,15 @@ package com.physic.music
 import android.media.audiofx.Equalizer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -49,24 +52,55 @@ fun EqualizerTab(theme: ThemeColors) {
         }
 
         eq?.let { e ->
+            val vertical by Prefs.eqVertical(LocalContext.current).collectAsState(initial = false)
             val numBands = e.numberOfBands.toInt()
             val range = e.bandLevelRange
-            for (b in 0 until numBands) {
-                val band = b.toShort()
-                var level by remember(band) { mutableStateOf(e.getBandLevel(band).toInt()) }
-                val freqHz = e.getCenterFreq(band) / 1000
-                val freqLabel = if (freqHz < 1000) "${freqHz}Hz" else "${freqHz / 1000}kHz"
-                Column {
-                    Text("$freqLabel   ${level}mB", color = theme.text, fontSize = 12.sp)
-                    Slider(
-                        value = level.toFloat(),
-                        valueRange = range[0].toFloat()..range[1].toFloat(),
-                        onValueChange = {
-                            level = it.toInt()
-                            e.setBandLevel(band, it.toInt().toShort())
-                        },
-                        colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent)
-                    )
+            if (vertical) {
+                Row(
+                    Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    for (b in 0 until numBands) {
+                        val band = b.toShort()
+                        var level by remember(band) { mutableStateOf(e.getBandLevel(band).toInt()) }
+                        val freqHz = e.getCenterFreq(band) / 1000
+                        val freqLabel = if (freqHz < 1000) "${freqHz}Hz" else "${freqHz / 1000}kHz"
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(freqLabel, color = theme.text, fontSize = 11.sp)
+                            Box(modifier = Modifier.width(80.dp).height(200.dp)) {
+                                Slider(
+                                    value = level.toFloat(),
+                                    valueRange = range[0].toFloat()..range[1].toFloat(),
+                                    onValueChange = {
+                                        level = it.toInt()
+                                        e.setBandLevel(band, it.toInt().toShort())
+                                    },
+                                    colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent),
+                                    modifier = Modifier.fillMaxSize().graphicsLayer(rotationZ = -90f)
+                                )
+                            }
+                            Text("${level}mB", color = theme.subtext, fontSize = 11.sp)
+                        }
+                    }
+                }
+            } else {
+                for (b in 0 until numBands) {
+                    val band = b.toShort()
+                    var level by remember(band) { mutableStateOf(e.getBandLevel(band).toInt()) }
+                    val freqHz = e.getCenterFreq(band) / 1000
+                    val freqLabel = if (freqHz < 1000) "${freqHz}Hz" else "${freqHz / 1000}kHz"
+                    Column {
+                        Text("$freqLabel   ${level}mB", color = theme.text, fontSize = 12.sp)
+                        Slider(
+                            value = level.toFloat(),
+                            valueRange = range[0].toFloat()..range[1].toFloat(),
+                            onValueChange = {
+                                level = it.toInt()
+                                e.setBandLevel(band, it.toInt().toShort())
+                            },
+                            colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent)
+                        )
+                    }
                 }
             }
         }

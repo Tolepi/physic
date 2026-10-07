@@ -85,6 +85,7 @@ class MusicService : MediaSessionService() {
             launch { Prefs.playCountPct(applicationContext).collect { currentPct = it } }
             while (true) {
                 kotlinx.coroutines.delay(1000)
+                updateNotification()
                 try {
                     val p = player
                     if (p != null && p.playWhenReady && p.currentPosition > 0 && p.duration > 0) {
@@ -117,6 +118,11 @@ class MusicService : MediaSessionService() {
             .setSubText(meta?.albumTitle?.toString())
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setOngoing(playing)
+            .setProgress(
+                (player?.duration?.coerceAtLeast(1) ?: 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                (player?.currentPosition?.coerceAtLeast(0) ?: 0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                false
+            )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(android.R.drawable.ic_media_previous, "Prev", prev)
             .addAction(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, "Play/Pause", toggle)

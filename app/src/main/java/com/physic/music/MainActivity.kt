@@ -960,6 +960,21 @@ fun SettingsTab(
                 }
             }
             if (themeName == "Custom") {
+                val existing by Prefs.savedCustomThemes(c).collectAsState(initial = "{}")
+                val savedNames = remember(existing) {
+                    try {
+                        val obj = org.json.JSONObject(existing)
+                        obj.keys().asSequence().toList()
+                    } catch (e: Exception) { emptyList() }
+                }
+                Row(Modifier.fillMaxWidth()) {
+                    Text("color picks", color = theme.subtext, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        scope.launch {
+                            Prefs.setCustom(c, customBg, customSurface, customText, customSubtext, customAccent, customBorder)
+                        }
+                    }) { Text(L.tr("apply")) }
+                }
                 listOf("bg" to customBg, "surface" to customSurface, "text" to customText, "subtext" to customSubtext, "accent" to customAccent, "border" to customBorder).forEachIndexed { i, pair ->
                     val label = pair.first
                     val state = pair.second
@@ -968,6 +983,12 @@ fun SettingsTab(
                         ColorSliderPicker(
                             current = state,
                             onPick = { hex ->
+                                val bg = if (label == "bg") hex else customBg
+                                val surface = if (label == "surface") hex else customSurface
+                                val text = if (label == "text") hex else customText
+                                val subtext = if (label == "subtext") hex else customSubtext
+                                val accent = if (label == "accent") hex else customAccent
+                                val border = if (label == "border") hex else customBorder
                                 when (label) {
                                     "bg" -> customBg = hex
                                     "surface" -> customSurface = hex
@@ -976,9 +997,16 @@ fun SettingsTab(
                                     "accent" -> customAccent = hex
                                     else -> customBorder = hex
                                 }
+                                scope.launch { Prefs.setCustom(c, bg, surface, text, subtext, accent, border) }
                             }
                         )
                         OutlinedTextField(value = state, onValueChange = { v ->
+                            val bg = if (label == "bg") v else customBg
+                            val surface = if (label == "surface") v else customSurface
+                            val text = if (label == "text") v else customText
+                            val subtext = if (label == "subtext") v else customSubtext
+                            val accent = if (label == "accent") v else customAccent
+                            val border = if (label == "border") v else customBorder
                             when (label) {
                                 "bg" -> customBg = v
                                 "surface" -> customSurface = v
@@ -987,10 +1015,42 @@ fun SettingsTab(
                                 "accent" -> customAccent = v
                                 else -> customBorder = v
                             }
+                            scope.launch { Prefs.setCustom(c, bg, surface, text, subtext, accent, border) }
                         }, label = { Text(L.tr("$label #hex")) }, modifier = Modifier.fillMaxWidth())
                     }
                 }
-                Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customSurface, customText, customSubtext, customAccent, customBorder) } }) { Text(L.tr("apply")) }
+                var newThemeName by remember { mutableStateOf("") }
+                Row(Modifier.fillMaxWidth()) {
+                    OutlinedTextField(value = newThemeName, onValueChange = { newThemeName = it }, label = { Text("save as…") }, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        if (newThemeName.isNotBlank()) {
+                            val j = try { org.json.JSONObject(existing) } catch (e: Exception) { org.json.JSONObject() }
+                            j.put(newThemeName, "${customBg.trimStart('#')}|${customSurface.trimStart('#')}|${customText.trimStart('#')}|${customSubtext.trimStart('#')}|${customAccent.trimStart('#')}|${customBorder.trimStart('#')}")
+                            scope.launch { Prefs.setSavedCustomThemes(c, j.toString()) }
+                            newThemeName = ""
+                        }
+                    }) { Text("[ save ]") }
+                }
+                if (savedNames.isNotEmpty()) {
+                    Text("saved themes:", color = theme.subtext, fontSize = 11.sp)
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        savedNames.forEach { name ->
+                            Surface(
+                                Modifier.padding(end = 8.dp, bottom = 4.dp).clickable {
+                                    val j = try { org.json.JSONObject(existing) } catch (e: Exception) { org.json.JSONObject() }
+                                    val list = j.optString(name, "").split("|")
+                                    if (list.size >= 6) {
+                                        scope.launch {
+                                            Prefs.setCustom(c, "#" + list[0], "#" + list[1], "#" + list[2], "#" + list[3], "#" + list[4], "#" + list[5])
+                                        }
+                                    }
+                                },
+                                color = theme.surface,
+                                shape = RoundedCornerShape(0.dp)
+                            ) { Text(name, color = theme.text, modifier = Modifier.padding(8.dp), fontSize = 11.sp) }
+                        }
+                    }
+                }
             }
         }
 
@@ -1101,7 +1161,12 @@ fun SettingsTab(
         val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
         val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
         val npSize by Prefs.npSize(c).collectAsState(initial = 52)
+        val eqVertical by Prefs.eqVertical(c).collectAsState(initial = false)
         Panel("customization", theme, shape = RoundedCornerShape(0.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("vertical equalizer sliders", color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(checked = eqVertical, onCheckedChange = { scope.launch { Prefs.setEqVertical(c, it) } })
+            }
             Text("song row padding: ${rowPad}dp", color = theme.text, fontSize = 13.sp)
             Slider(value = rowPad.toFloat(), onValueChange = { v -> scope.launch { Prefs.setRowPad(c, v.toInt().coerceIn(0, 24)) } }, valueRange = 0f..24f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
