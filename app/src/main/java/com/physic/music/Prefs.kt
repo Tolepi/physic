@@ -50,6 +50,8 @@ object Prefs {
     private val EQ_VERTICAL = booleanPreferencesKey("eq_vertical")
     private val SAVED_CUSTOM_THEMES = stringPreferencesKey("saved_custom_themes")
     private val BG_ALPHA = intPreferencesKey("bg_alpha")
+    private val FONT_SCALE = floatPreferencesKey("font_scale")
+    private val LINE_HEIGHT_SCALE = floatPreferencesKey("line_height_scale")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -97,6 +99,10 @@ object Prefs {
     suspend fun setSavedCustomThemes(c: Context, v: String) = c.ds.edit { it[SAVED_CUSTOM_THEMES] = v }
     fun bgAlpha(c: Context) = c.ds.data.map { it[BG_ALPHA] ?: 45 }
     suspend fun setBgAlpha(c: Context, v: Int) = c.ds.edit { it[BG_ALPHA] = v }
+    fun fontScale(c: Context) = c.ds.data.map { it[FONT_SCALE] ?: 1.0f }
+    suspend fun setFontScale(c: Context, v: Float) = c.ds.edit { it[FONT_SCALE] = v }
+    fun lineHeightScale(c: Context) = c.ds.data.map { it[LINE_HEIGHT_SCALE] ?: 1.0f }
+    suspend fun setLineHeightScale(c: Context, v: Float) = c.ds.edit { it[LINE_HEIGHT_SCALE] = v }
 
     /** Serialize every preference + data file into one JSON blob. */
     suspend fun exportAll(c: Context): String {

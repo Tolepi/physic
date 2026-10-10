@@ -50,6 +50,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -157,9 +159,21 @@ fun PhysicApp() {
         }
     }
     val onboarded by Prefs.onboarded(c).collectAsState(initial = false)
+    val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
+    val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 1f)
+    val baseDensity = LocalDensity.current
+    val scaledDensity = remember(baseDensity, fontScale) {
+        Density(baseDensity.density, baseDensity.fontScale * fontScale)
+    }
+
+    @Composable
+    fun Wrap(content: @Composable () -> Unit) {
+        CompositionLocalProvider(LocalDensity provides scaledDensity) { content() }
+    }
+
     if (!onboarded) {
         Surface(Modifier.fillMaxSize(), color = theme.bg) {
-            ProvideTextStyle(TextStyle(fontFamily = fontFamily)) { OnboardingScreen(theme) }
+            Wrap { ProvideTextStyle(TextStyle(fontFamily = fontFamily, lineHeight = (14 * lineHeightScale).sp)) { OnboardingScreen(theme) } }
         }
         return
     }
@@ -190,10 +204,11 @@ fun PhysicApp() {
             labelMedium = labelMedium.copy(fontFamily = fontFamily, color = theme.text)
         )
     }) {
+    Wrap {
     Box(Modifier.fillMaxSize().background(theme.bg)) {
         if (bgImg.isNotEmpty()) AsyncImage(model = bgImg, contentDescription = null,
             modifier = Modifier.fillMaxSize().alpha(bgAlphaPct / 100f), contentScale = ContentScale.Fit)
-        ProvideTextStyle(TextStyle(fontFamily = fontFamily)) {
+        ProvideTextStyle(TextStyle(fontFamily = fontFamily, lineHeight = (14 * lineHeightScale).sp)) {
             val imageLoader = remember {
                 coil.ImageLoader.Builder(c)
                     .components {
@@ -343,6 +358,7 @@ fun PhysicApp() {
             }
         }
     }
+}
 }
 }
 }
@@ -1223,6 +1239,8 @@ fun SettingsTab(
         val npSize by Prefs.npSize(c).collectAsState(initial = 52)
         val eqVertical by Prefs.eqVertical(c).collectAsState(initial = false)
         val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
+        val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
+        val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 1f)
         val backupMsg by remember { mutableStateOf("") }
         var backupText by remember { mutableStateOf("") }
         val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -1266,6 +1284,12 @@ fun SettingsTab(
                 Text("vertical equalizer sliders", color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Switch(checked = eqVertical, onCheckedChange = { scope.launch { Prefs.setEqVertical(c, it) } })
             }
+            Text("font size: ${(fontScale * 100).toInt()}%", color = theme.text, fontSize = 13.sp)
+            Slider(value = fontScale, onValueChange = { v -> scope.launch { Prefs.setFontScale(c, (v * 20).toInt() / 20f) } }, valueRange = 0.7f..2.0f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+            Text("line height: ${(lineHeightScale * 100).toInt()}%", color = theme.text, fontSize = 13.sp)
+            Slider(value = lineHeightScale, onValueChange = { v -> scope.launch { Prefs.setLineHeightScale(c, (v * 20).toInt() / 20f) } }, valueRange = 0.8f..2.5f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
             Text("song row padding: ${rowPad}dp", color = theme.text, fontSize = 13.sp)
             Slider(value = rowPad.toFloat(), onValueChange = { v -> scope.launch { Prefs.setRowPad(c, v.toInt().coerceIn(0, 24)) } }, valueRange = 0f..24f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
