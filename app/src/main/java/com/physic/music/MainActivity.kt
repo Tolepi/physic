@@ -441,37 +441,72 @@ fun SpinningDisc(sizeDp: Int) {
     }
 }
 
-/** Mini chrome-dino runner with score, high score, coins, day/night and multiple obstacle types. */
+/** Mini chrome-dino runner. All state lives in a plain holder so taps apply on the
+ *  very next frame and per-frame updates only invalidate the draw phase. */
+private class DinoState {
+    var dinoY = 0f
+    var vy = 0f
+    var speed = 0.22f
+    var score = 0
+    var coins = 0
+    var best = 0
+    var dead = false
+    var running = false
+    var night = false
+    var groundOffset = 0f
+    var flashT = 0f
+    val obstacles = ArrayList<DinoObstacle>(4)
+}
+
 private data class DinoObstacle(val x: Float, val kind: Int, val yOff: Float = 0f, val w: Float, val h: Float)
+
+private const val DINO_X = 0.06f
+private const val DINO_W = 26f
+private const val DINO_H = 30f
 
 @Composable
 fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var running by remember { mutableStateOf(false) }
-    var dead by remember { mutableStateOf(false) }
-    var dinoY by remember { mutableStateOf(0f) }
-    var vy by remember { mutableStateOf(0f) }
-    var speed by remember { mutableStateOf(0.22f) }
-    var score by remember { mutableStateOf(0) }
-    var coins by remember { mutableStateOf(0) }
-    var obstacles by remember { mutableStateOf(listOf<DinoObstacle>()) }
-    var groundOffset by remember { mutableStateOf(0f) }
-    var night by remember { mutableStateOf(false) }
-    var jumped by remember { mutableStateOf(false) }
-    var best by remember { mutableStateOf(0) }
-
-    LaunchedEffect(Unit) {
-        best = kotlinx.coroutines.runBlocking { Prefs.dinoBest(ctx).first() }
+    val st = remember { DinoState() }
+    // draw-phase invalidation only (no recomposition per frame)
+    val tick = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val hudPaint = remember(theme.subtext) {
+        android.graphics.Paint().apply {
+            isAntiAlias = true; textSize = 13f
+            color = android.graphics.Color.argb(
+                (theme.subtext.alpha * 255).toInt(),
+                (theme.subtext.red * 255).toInt(), (theme.subtext.green * 255).toInt(), (theme.subtext.blue * 255).toInt()
+            )
+        }
+    }
+    val bigPaint = remember(theme.text) {
+        android.graphics.Paint().apply {
+            isAntiAlias = true; textSize = 18f
+            color = android.graphics.Color.argb(
+                (theme.text.alpha * 255).toInt(),
+                (theme.text.red * 255).toInt(), (theme.text.green * 255).toInt(), (theme.text.blue * 255).toInt()
+            )
+        }
     }
 
-    val dinoW = 26f
-    val dinoH = 30f
-
     fun reset() {
-        score = 0; coins = 0; speed = 0.22f; dinoY = 0f; vy = 0f; groundOffset = 0f
-        obstacles = listOf(DinoObstacle(1f, 0, 0f, 12f, 34f), DinoObstacle(1.5f, 0, 0f, 12f, 34f))
-        dead = false; running = true
+        st.score = 0; st.coins = 0; st.speed = 0.22f; st.dinoY = 0f; st.vy = 0f; st.groundOffset = 0f
+        st.obstacles.clear()
+        st.obstacles += DinoObstacle(1f, 0, 0f, 12f, 34f)
+        st.obstacles += DinoObstacle(1.55f, 0, 0f, 12f, 34f)
+        st.dead = false; st.running = true; st.flashT = 0f
+        tick.intValue++
+    }
+
+    // pre-populate so something is on screen before the first tap
+    LaunchedEffect(Unit) {
+        if (st.obstacles.isEmpty()) {
+            st.obstacles += DinoObstacle(1f, 0, 0f, 12f, 34f)
+            st.obstacles += DinoObstacle(1.55f, 0, 0f, 12f, 34f)
+        }
+        st.best = kotlinx.coroutines.runBlocking { Prefs.dinoBest(ctx).first() }
+        tick.intValue++
     }
 
     LaunchedEffect(Unit) {
@@ -479,63 +514,71 @@ fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier =
         val rnd = java.util.Random()
         while (true) {
             withFrameNanos { now ->
-                if (last != 0L && running && !dead) {
-                    val dt = ((now - last) / 1_000_000_000f).coerceAtMost(0.04f)
-                    // physics
-                    vy -= 1500f * dt
-                    dinoY += vy * dt
-                    if (dinoY <= 0f) { dinoY = 0f; vy = 0f }
-                    val step = speed * dt
-                    groundOffset = (groundOffset + step * 400f) % 40f
-                    score += (step * 120f).toInt()
-                    if (score > 0 && score % 700 < 3) night = !night
+                if (last != 0L && st.running && !st.dead) {
+                    val dt = ((now - last) / 1_000_000_000f).coerceAtMost(0.033f)
+                    st.vy -= 1500f * dt
+                    st.dinoY += st.vy * dt
+                    if (st.dinoY <= 0f) { st.dinoY = 0f; st.vy = 0f }
+                    val step = st.speed * dt
+                    st.groundOffset = (st.groundOffset + step * 420f) % 40f
+                    st.score += (step * 120f).toInt()
+                    if (st.score > 0 && st.score % 700 < 3) st.night = !st.night
+                    if (st.flashT > 0f) st.flashT = (st.flashT - dt).coerceAtLeast(0f)
 
-                    var list = obstacles.map { it.copy(x = it.x - step / 0.9f) }
-                    // spawn
-                    val lastX = list.maxOfOrNull { it.x } ?: -1f
-                    if (lastX < 0.55f) {
+                    val list = st.obstacles
+                    for (i in list.indices) {
+                        val o = list[i]
+                        list[i] = o.copy(x = o.x - step / 0.9f)
+                    }
+                    var spawnFrom = -1f
+                    for (o in list) if (o.x > spawnFrom) spawnFrom = o.x
+                    if (spawnFrom < 0.5f) {
                         val kind = when {
-                            speed < 0.32f -> 0
-                            speed < 0.45f -> rnd.nextInt(3)
-                            else -> rnd.nextInt(4)
+                            st.speed < 0.32f -> 0
+                            st.speed < 0.46f -> rnd.nextInt(3)
+                            else -> rnd.nextInt(5)
                         }
-                        val obs = when (kind) {
-                            0 -> DinoObstacle(1.02f, 0, 0f, 12f, 34f)
-                            1 -> DinoObstacle(1.02f, 1, 0f, 20f, 44f)
-                            2 -> DinoObstacle(1.02f, 2, 0f, 22f, 16f)          // low bird: jump over
-                            else -> DinoObstacle(1.02f, 2, 26f, 22f, 16f)  // high bird: run under
+                        when (kind) {
+                            0 -> list.add(DinoObstacle(1.02f, 0, 0f, 12f, 34f))
+                            1 -> list.add(DinoObstacle(1.02f, 1, 0f, 20f, 44f))
+                            2 -> list.add(DinoObstacle(1.02f, 2, 0f, 24f, 16f))
+                            3 -> list.add(DinoObstacle(1.02f, 2, 28f, 24f, 16f))
+                            else -> list.add(DinoObstacle(1.02f, 3, 20f, 12f, 12f)) // coin
                         }
-                        list = list + obs
-                        if (speed > 0.34f && rnd.nextInt(3) == 0) {
-                            list = list + DinoObstacle(1.02f + (0.18f + rnd.nextFloat() * 0.12f), 0, 0f, 12f, 34f)
+                        if (st.speed > 0.34f && rnd.nextInt(3) == 0) {
+                            list.add(DinoObstacle(1.02f + (0.2f + rnd.nextFloat() * 0.12f), 0, 0f, 12f, 34f))
                         }
-                    }
-                    list = list.filter { it.x > -0.2f }
-
-                    // coin pickup
-                    val newCoins = list.count { o ->
-                        o.kind == 3 && o.x < 0.06f + dinoW / 1000f && o.x + 0.02f > 0.06f
-                    }
-                    if (newCoins > 0) {
-                        coins += newCoins
-                        list = list.filterNot { it.kind == 3 && it.x < 0.06f + dinoW / 1000f }
                     }
 
-                    // collisions
-                    val hit = list.any { o ->
-                        val dinoRight = 0.06f + dinoW / 1000f
-                        val hitX = o.x < dinoRight && o.x + o.w / 1000f > 0.06f
-                        val hitY = dinoY < (o.h + o.yOff) - 8f
-                        hitX && hitY
+                    val dinoRight = DINO_X + DINO_W / 1000f
+                    var collision = false
+                    var gotCoin = false
+                    var i = 0
+                    while (i < list.size) {
+                        val o = list[i]
+                        val hitX = o.x < dinoRight && o.x + o.w / 1000f > DINO_X
+                        if (hitX) {
+                            if (o.kind == 3) {
+                                if (st.dinoY < o.h + o.yOff + 4f) { gotCoin = true; list.removeAt(i) }
+                            } else if (st.dinoY < o.h + o.yOff - 8f) {
+                                collision = true
+                            }
+                        }
+                        i++
                     }
-                    if (hit) {
-                        dead = true; running = false
-                        if (score > best) { best = score; scope.launch { Prefs.setDinoBest(ctx, best) } }
+                    if (gotCoin) { st.coins++; st.flashT = 0.35f }
+                    list.removeAll { it.x < -0.2f }
+
+                    if (collision) {
+                        st.dead = true; st.running = false; st.flashT = 0.5f
+                        if (st.score > st.best) {
+                            st.best = st.score
+                            scope.launch { Prefs.setDinoBest(ctx, st.best) }
+                        }
                     }
-                    obstacles = list
-                    speed = (speed + dt * 0.012f).coerceAtMost(0.85f)
+                    st.speed = (st.speed + dt * 0.012f).coerceAtMost(0.85f)
                 }
-                last = now
+                tick.intValue++
             }
         }
     }
@@ -549,36 +592,39 @@ fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier =
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
-                        when {
-                            dead -> reset()
-                            !running -> running = true
-                            dinoY <= 0f -> { vy = 520f; jumped = true }
+                        if (st.dead) {
+                            reset()
+                        } else {
+                            if (!st.running) st.running = true
+                            if (st.dinoY <= 0.01f) { st.vy = 520f; st.flashT = 0.15f }
                         }
+                        tick.intValue++
                     },
-                    onDoubleTap = { if (!dead && running && dinoY <= 0f) vy = 780f }  // super jump
+                    onDoubleTap = {
+                        if (!st.dead && st.running && st.dinoY <= 0.01f) { st.vy = 800f; st.flashT = 0.2f }
+                    }
                 )
             }
     ) {
+        @Suppress("UNUSED_EXPRESSION") tick.intValue   // draw-phase read
         val w = size.width
         val h = size.height
         val groundY = h - 18f
-        val ink = if (night) theme.subtext else theme.text
-        val inkAccent = if (night) theme.subtext else theme.accent
+        val ink = if (st.night) theme.subtext else theme.text
+        val inkAccent = if (st.night) theme.subtext else theme.accent
 
-        // sky tint when night
-        if (night) drawRect(theme.bg.copy(alpha = 0.35f), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(w, h))
+        if (st.night) drawRect(theme.bg.copy(alpha = 0.35f), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(w, h))
 
-        // scrolling ground dashes
         drawRect(theme.border.copy(alpha = 0.6f), androidx.compose.ui.geometry.Offset(0f, groundY), androidx.compose.ui.geometry.Size(w, 1.5f))
-        var gx = -groundOffset
+        var gx = -st.groundOffset
         while (gx < w) {
             drawRect(theme.border.copy(alpha = 0.4f), androidx.compose.ui.geometry.Offset(gx, groundY + 2f), androidx.compose.ui.geometry.Size(10f, 1.5f))
             gx += 20f
         }
 
-        // obstacles
-        obstacles.forEach { o ->
+        st.obstacles.forEach { o ->
             val ox = w * o.x
+            if (ox < -40f) return@forEach
             val oy = groundY - o.h - o.yOff
             when (o.kind) {
                 0 -> {
@@ -587,68 +633,50 @@ fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier =
                     drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 2f, oy - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
                 }
                 1 -> {
-                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox, oy + 8f), androidx.compose.ui.geometry.Size(o.w, o.h - 8f))
-                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox - 2f, oy), androidx.compose.ui.geometry.Size(7f, 10f))
-                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 5f, oy + 2f), androidx.compose.ui.geometry.Size(7f, 8f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox, oy + 10f), androidx.compose.ui.geometry.Size(o.w, o.h - 10f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox - 3f, oy), androidx.compose.ui.geometry.Size(7f, 11f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 4f, oy + 3f), androidx.compose.ui.geometry.Size(7f, 9f))
                 }
                 2 -> {
                     drawRect(ink, androidx.compose.ui.geometry.Offset(ox, oy + 4f), androidx.compose.ui.geometry.Size(o.w, o.h - 8f))
                     drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 4f, oy), androidx.compose.ui.geometry.Size(4f, o.h))
                 }
-                3 -> {
-                    drawCircle(theme.accent, 6f, androidx.compose.ui.geometry.Offset(ox + 8f, oy + 8f))
-                }
+                3 -> drawCircle(theme.accent, 6f, androidx.compose.ui.geometry.Offset(ox + 6f, oy + 6f))
             }
         }
 
-        // dino
-        val dx = w * 0.06f
-        val dy = groundY - dinoH - dinoY
-        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx, dy), androidx.compose.ui.geometry.Size(dinoW, dinoH))
-        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + dinoW - 6f, dy - 8f), androidx.compose.ui.geometry.Size(8f, 10f))
-        drawRect(theme.bg, androidx.compose.ui.geometry.Offset(dx + dinoW - 9f, dy + 6f), androidx.compose.ui.geometry.Size(4f, 4f))
-        // legs wiggle while running
-        val legPhase = if (running && !dead) (groundOffset / 5f) % 4f else 0f
-        val legY = groundY - (if (legPhase < 2f) 0f else 4f)
-        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + 3f, legY - 5f), androidx.compose.ui.geometry.Size(5f, 5f))
-        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + dinoW - 9f, groundY - (if (legPhase < 2f) 4f else 0f) - 5f), androidx.compose.ui.geometry.Size(5f, 5f))
+        val dx = w * DINO_X
+        val dy = groundY - DINO_H - st.dinoY
+        // tail
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx - 10f, dy + 8f), androidx.compose.ui.geometry.Size(12f, 4f))
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx, dy), androidx.compose.ui.geometry.Size(DINO_W, DINO_H))
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + DINO_W - 6f, dy - 8f), androidx.compose.ui.geometry.Size(9f, 10f))
+        drawRect(theme.bg, androidx.compose.ui.geometry.Offset(dx + DINO_W - 9f, dy + 5f), androidx.compose.ui.geometry.Size(4f, 4f))
+        val legPhase = if (st.running && !st.dead) (st.groundOffset / 5f) % 4f else 0f
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + 3f, groundY - (if (legPhase < 2f) 0f else 4f) - 5f), androidx.compose.ui.geometry.Size(5f, 5f))
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + DINO_W - 9f, groundY - (if (legPhase < 2f) 4f else 0f) - 5f), androidx.compose.ui.geometry.Size(5f, 5f))
+        if (st.flashT > 0f) {
+            drawRect(theme.accent.copy(alpha = (st.flashT * 2f).coerceAtMost(0.6f)), androidx.compose.ui.geometry.Offset(dx, dy), androidx.compose.ui.geometry.Size(DINO_W, DINO_H))
+        }
 
-        // stars when night
-        if (night) {
-            var sx = 12f
-            var i = 0
+        if (st.night) {
+            var sx = 12f; var i = 0
             while (sx < w - 8f) {
                 drawCircle(theme.accent.copy(alpha = 0.6f), 1.6f, androidx.compose.ui.geometry.Offset(sx, 14f + (i % 3) * 8f))
                 sx += 37f; i++
             }
         }
 
-        // hud
-        val paint = android.graphics.Paint().apply {
-            isAntiAlias = true; textSize = 13f
-            color = android.graphics.Color.argb(
-                (theme.subtext.alpha * 255).toInt(),
-                (theme.subtext.red * 255).toInt(), (theme.subtext.green * 255).toInt(), (theme.subtext.blue * 255).toInt()
-            )
-        }
-        val bigPaint = android.graphics.Paint().apply {
-            isAntiAlias = true; textSize = 18f
-            color = android.graphics.Color.argb(
-                (ink.alpha * 255).toInt(),
-                (ink.red * 255).toInt(), (ink.green * 255).toInt(), (ink.blue * 255).toInt()
-            )
-        }
         drawContext.canvas.nativeCanvas.apply {
-            drawText("score $score   ★$coins   hi $best", 10f, 18f, paint)
+            drawText("score ${st.score}   ★${st.coins}   hi ${st.best}", 10f, 18f, hudPaint)
             when {
-                dead -> {
+                st.dead -> {
                     drawText("GAME OVER", w / 2f - 46f, h / 2f, bigPaint)
-                    drawText("tap to retry", w / 2f - 38f, h / 2f + 18f, paint)
+                    drawText("tap to retry", w / 2f - 38f, h / 2f + 18f, hudPaint)
                 }
-                !running -> drawText("tap to play · double-tap = super jump", w / 2f - 110f, h / 2f, paint)
-                night -> drawText("☾ night", w - 46f, 18f, paint)
+                !st.running -> drawText("tap to play · double-tap = super jump", w / 2f - 110f, h / 2f, hudPaint)
+                st.night -> drawText("night", w - 34f, 18f, hudPaint)
             }
-            if (jumped && running && !dead) drawText("⇡", dx, dy - 6f, paint)
         }
     }
 }
@@ -743,7 +771,7 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         }
 
         Panel("welcome — tap to edit", theme, shape = shape) {
-            Text(welcome, color = theme.text, fontSize = 18.sp, modifier = Modifier.clickable { editWelcome = true })
+            Text(welcome, color = theme.text, fontSize = 18.sp, lineHeight = 26.sp, modifier = Modifier.clickable { editWelcome = true })
         }
 
         DinoGame(theme, shape)
