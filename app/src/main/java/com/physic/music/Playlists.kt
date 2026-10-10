@@ -32,6 +32,16 @@ object Playlists {
         save(c, j)
     }
 
+    fun move(c: Context, name: String, from: Int, to: Int) {
+        val j = load(c)
+        val arr = j.optJSONArray(name) ?: return
+        if (from !in 0 until arr.length() || to !in 0 until arr.length()) return
+        val v = arr.getString(from)
+        arr.remove(from)
+        arr.put(to, v)
+        save(c, j)
+    }
+
     fun remove(c: Context, name: String, index: Int) {
         val j = load(c)
         val arr = j.optJSONArray(name) ?: return

@@ -44,8 +44,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -163,8 +165,34 @@ fun PhysicApp() {
     }
 
     val bgImg by Prefs.customBgImg(c).collectAsState(initial = "")
+    val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
+    val isLight = theme.bg.luminance() > 0.5f
+    val m3Scheme = if (isLight) {
+        androidx.compose.material3.lightColorScheme(
+            primary = theme.accent, onPrimary = theme.bg, background = theme.bg, onBackground = theme.text,
+            surface = theme.surface, onSurface = theme.text, surfaceVariant = theme.surface, onSurfaceVariant = theme.subtext,
+            outline = theme.border, secondary = theme.accent
+        )
+    } else {
+        androidx.compose.material3.darkColorScheme(
+            primary = theme.accent, onPrimary = theme.bg, background = theme.bg, onBackground = theme.text,
+            surface = theme.surface, onSurface = theme.text, surfaceVariant = theme.surface, onSurfaceVariant = theme.subtext,
+            outline = theme.border, secondary = theme.accent
+        )
+    }
+    androidx.compose.material3.MaterialTheme(colorScheme = m3Scheme, typography = androidx.compose.material3.Typography().run {
+        copy(
+            bodyLarge = bodyLarge.copy(fontFamily = fontFamily, color = theme.text),
+            bodyMedium = bodyMedium.copy(fontFamily = fontFamily, color = theme.text),
+            labelLarge = labelLarge.copy(fontFamily = fontFamily, color = theme.text),
+            titleLarge = titleLarge.copy(fontFamily = fontFamily, color = theme.text),
+            titleMedium = titleMedium.copy(fontFamily = fontFamily, color = theme.text),
+            labelMedium = labelMedium.copy(fontFamily = fontFamily, color = theme.text)
+        )
+    }) {
     Box(Modifier.fillMaxSize().background(theme.bg)) {
-        if (bgImg.isNotEmpty()) AsyncImage(model = bgImg, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        if (bgImg.isNotEmpty()) AsyncImage(model = bgImg, contentDescription = null,
+            modifier = Modifier.fillMaxSize().alpha(bgAlphaPct / 100f), contentScale = ContentScale.Fit)
         ProvideTextStyle(TextStyle(fontFamily = fontFamily)) {
             val imageLoader = remember {
                 coil.ImageLoader.Builder(c)
@@ -180,7 +208,8 @@ fun PhysicApp() {
             val profilePic by Prefs.profilePic(c).collectAsState(initial = "")
             var tab by remember { mutableStateOf(0) }
             var songs by remember { mutableStateOf(listOf<Song>()) }
-            LaunchedEffect(folders) { songs = MusicIndex.songsInFolders(c, folders) }
+            val rescan = MusicIndex.rescanTick.intValue
+            LaunchedEffect(folders, rescan) { songs = MusicIndex.songsInFolders(c, folders) }
 
             val title = Playback.title.collectAsState().value
             val artist = Playback.artist.collectAsState().value
@@ -314,6 +343,7 @@ fun PhysicApp() {
             }
         }
     }
+}
 }
 }
 
@@ -663,16 +693,19 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
                     OutlinedTextField(value = tYear, onValueChange = { tYear = it }, label = { Text("year") })
                     OutlinedTextField(value = tTrack, onValueChange = { tTrack = it }, label = { Text("track #") })
                     Text("delete", color = Color(0xFFEF5350), modifier = Modifier.clickable {
+                        var deleted = false
                         try {
-                            if (android.os.Build.VERSION.SDK_INT >= 30) {
-                                android.provider.MediaStore.createDeleteRequest(c.contentResolver, listOf(song.uri)).send(c, 0, null)
-                            } else {
-                                java.io.File(song.path).delete()
-                                c.contentResolver.delete(song.uri, null, null)
-                            }
-                        } catch (_: Exception) {
-                            try { java.io.File(song.path).delete() } catch (_: Exception) {}
+                            deleted = c.contentResolver.delete(song.uri, null, null) > 0
+                        } catch (_: Exception) {}
+                        if (!deleted) {
+                            try { deleted = java.io.File(song.path).delete() } catch (_: Exception) {}
                         }
+                        if (!deleted) {
+                            try {
+                                android.provider.MediaStore.createDeleteRequest(c.contentResolver, listOf(song.uri)).send(c, 0, null)
+                            } catch (_: Exception) {}
+                        }
+                        MusicIndex.requestRescan()
                         editSong = null
                     })
                 }
@@ -680,6 +713,7 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
             confirmButton = {
                 TextButton(onClick = {
                     Meta.set(c, song.path, tTitle, tArtist, tAlbum, tYear, tTrack, tCover)
+                    MusicIndex.requestRescan()
                     editSong = null
                 }) { Text(L.tr("ok")) }
             }
@@ -1188,6 +1222,45 @@ fun SettingsTab(
         val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
         val npSize by Prefs.npSize(c).collectAsState(initial = 52)
         val eqVertical by Prefs.eqVertical(c).collectAsState(initial = false)
+        val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
+        val backupMsg by remember { mutableStateOf("") }
+        var backupText by remember { mutableStateOf("") }
+        val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val json = Prefs.exportAll(c)
+                        c.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+        val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    try {
+                        val text = c.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: ""
+                        Prefs.importAll(c, text)
+                        MusicIndex.requestRescan()
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+        Panel("backup / restore", theme, shape = RoundedCornerShape(0.dp)) {
+            Text("export profile, stats, playlists, metadata edits and settings into one file", color = theme.subtext, fontSize = 11.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { exportLauncher.launch("physic-backup.json") }) { Text("[ export all ]") }
+                TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text("[ import ]") }
+                TextButton(onClick = { scope.launch { backupText = Prefs.exportAll(c) } }) { Text("[ show json ]") }
+            }
+            if (backupText.isNotEmpty()) {
+                Text(backupText, color = theme.subtext, fontSize = 10.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
+                TextButton(onClick = { backupText = "" }) { Text("[ close ]") }
+            }
+            Text("background image opacity: $bgAlphaPct%", color = theme.text, fontSize = 13.sp)
+            Slider(value = bgAlphaPct.toFloat(), onValueChange = { v -> scope.launch { Prefs.setBgAlpha(c, v.toInt().coerceIn(0, 100)) } }, valueRange = 0f..100f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+        }
         Panel("customization", theme, shape = RoundedCornerShape(0.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("vertical equalizer sliders", color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -1295,12 +1368,20 @@ fun PlaylistsTab(theme: ThemeColors) {
                 Spacer(Modifier.height(6.dp))
                 if (songs.isEmpty()) Text(L.tr("empty — add songs from the songs tab (+ icon)"), color = theme.subtext, fontSize = 12.sp)
                 songs.forEachIndexed { i, s ->
-                    Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, i) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f).clickable { Playback.play(c, songs, i) }) {
                             Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(s.path.substringAfterLast('/'), color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                            Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
                         }
-                        Text(L.tr("[x]"), color = theme.subtext, modifier = Modifier.clickable { Playlists.remove(c, open, i); removeTick++ })
+                        Text("▲", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable {
+                            if (i > 0) { Playlists.move(c, open, i, i - 1); removeTick++ }
+                        }.padding(horizontal = 6.dp))
+                        Text("▼", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable {
+                            if (i < songs.lastIndex) { Playlists.move(c, open, i, i + 1); removeTick++ }
+                        }.padding(horizontal = 6.dp))
+                        Text("[x]", color = theme.subtext, modifier = Modifier.clickable { Playlists.remove(c, open, i); removeTick++ }.padding(start = 6.dp))
                     }
                 }
             }

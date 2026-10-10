@@ -6,7 +6,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.File
 
 private val Context.ds: DataStore<Preferences> by preferencesDataStore("physic")
 
@@ -47,6 +49,7 @@ object Prefs {
     private val NP_SIZE = intPreferencesKey("np_size")
     private val EQ_VERTICAL = booleanPreferencesKey("eq_vertical")
     private val SAVED_CUSTOM_THEMES = stringPreferencesKey("saved_custom_themes")
+    private val BG_ALPHA = intPreferencesKey("bg_alpha")
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -92,6 +95,71 @@ object Prefs {
     suspend fun setEqVertical(c: Context, v: Boolean) = c.ds.edit { it[EQ_VERTICAL] = v }
     fun savedCustomThemes(c: Context) = c.ds.data.map { it[SAVED_CUSTOM_THEMES] ?: "{}" }
     suspend fun setSavedCustomThemes(c: Context, v: String) = c.ds.edit { it[SAVED_CUSTOM_THEMES] = v }
+    fun bgAlpha(c: Context) = c.ds.data.map { it[BG_ALPHA] ?: 45 }
+    suspend fun setBgAlpha(c: Context, v: Int) = c.ds.edit { it[BG_ALPHA] = v }
+
+    /** Serialize every preference + data file into one JSON blob. */
+    suspend fun exportAll(c: Context): String {
+        val prefs = c.ds.data.first().asMap()
+        val obj = org.json.JSONObject()
+        obj.put("_version", 1)
+        val p = org.json.JSONObject()
+        for ((key, v) in prefs) {
+            val k = key.name
+            when (v) {
+                is String -> p.put(k, v)
+                is Int -> p.put(k, v)
+                is Long -> p.put(k, v)
+                is Float -> p.put(k, v.toDouble())
+                is Boolean -> p.put(k, v)
+                else -> {}
+            }
+        }
+        obj.put("prefs", p)
+        val stats = File(c.filesDir, "stats.json")
+        if (stats.exists()) obj.put("stats", stats.readText())
+        val pls = File(c.filesDir, "playlists.json")
+        if (pls.exists()) obj.put("playlists", pls.readText())
+        val meta = File(c.filesDir, "meta_overrides.json")
+        if (meta.exists()) obj.put("meta", meta.readText())
+        val fonts = File(c.filesDir, "fonts")
+        if (fonts.exists() && fonts.listFiles()?.isNotEmpty() == true) {
+            val fo = org.json.JSONObject()
+            fonts.listFiles()?.forEach { f -> fo.put(f.name, f.readBytes().let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }) }
+            obj.put("fonts", fo)
+        }
+        return obj.toString(2)
+    }
+
+    /** Restore a blob produced by exportAll. */
+    suspend fun importAll(c: Context, json: String) {
+        val obj = try { org.json.JSONObject(json) } catch (e: Exception) { return }
+        obj.optJSONObject("prefs")?.let { p ->
+            c.ds.edit { prefs ->
+                p.keys().forEach { k ->
+                    when (val v = p.opt(k)) {
+                        is String -> prefs[stringPreferencesKey(k)] = v
+                        is Boolean -> prefs[booleanPreferencesKey(k)] = v
+                        is Int -> prefs[intPreferencesKey(k)] = v
+                        is Long -> prefs[longPreferencesKey(k)] = v
+                        is Double -> prefs[floatPreferencesKey(k)] = v.toFloat()
+                        else -> {}
+                    }
+                }
+            }
+        }
+        obj.optString("stats", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "stats.json").writeText(it) }
+        obj.optString("playlists", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "playlists.json").writeText(it) }
+        obj.optString("meta", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "meta_overrides.json").writeText(it) }
+        obj.optJSONObject("fonts")?.let { fo ->
+            val dir = File(c.filesDir, "fonts").apply { mkdirs() }
+            fo.keys().forEach { k ->
+                try {
+                    File(dir, k).writeBytes(android.util.Base64.decode(fo.getString(k), android.util.Base64.NO_WRAP))
+                } catch (_: Exception) {}
+            }
+        }
+    }
     suspend fun setWelcome(c: Context, v: String) = c.ds.edit { it[WELCOME] = v }
     suspend fun setProfileName(c: Context, v: String) = c.ds.edit { it[PROFILE_NAME] = v }
     suspend fun setProfilePic(c: Context, v: String) = c.ds.edit { it[PROFILE_PIC] = v }

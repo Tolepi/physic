@@ -21,6 +21,9 @@ data class Song(
 )
 
 object MusicIndex {
+    /** bump to force the UI to re-scan the media store (after metadata edits/deletes) */
+    val rescanTick = androidx.compose.runtime.mutableIntStateOf(0)
+    fun requestRescan() { rescanTick.intValue++ }
     fun foldersOfLibrary(c: Context): Set<String> {
         val set = mutableSetOf<String>()
         val col = MediaStore.Audio.Media.RELATIVE_PATH
