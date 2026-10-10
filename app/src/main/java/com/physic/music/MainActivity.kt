@@ -45,12 +45,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
@@ -97,6 +101,9 @@ fun albumArtUri(song: Song): Uri = if (!song.coverOverride.isNullOrEmpty()) Uri.
 else ContentUris.withAppendedId(
     MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, song.albumId
 )
+
+/** Opacity applied to panels/dialogs so a background image shows through. 1f = fully opaque. */
+val LocalUiAlpha = androidx.compose.runtime.staticCompositionLocalOf { 1f }
 
 @Composable
 fun PhysicApp() {
@@ -161,6 +168,9 @@ fun PhysicApp() {
     val onboarded by Prefs.onboarded(c).collectAsState(initial = false)
     val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
     val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 1f)
+    val bgImgEarly by Prefs.customBgImg(c).collectAsState(initial = "")
+    val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
+    val uiAlphaF = if (bgImgEarly.isNotEmpty()) (uiAlpha / 100f).coerceIn(0.15f, 1f) else 1f
     val baseDensity = LocalDensity.current
     val scaledDensity = remember(baseDensity, fontScale) {
         Density(baseDensity.density, baseDensity.fontScale * fontScale)
@@ -168,7 +178,10 @@ fun PhysicApp() {
 
     @Composable
     fun Wrap(content: @Composable () -> Unit) {
-        CompositionLocalProvider(LocalDensity provides scaledDensity) { content() }
+        CompositionLocalProvider(
+            LocalDensity provides scaledDensity,
+            LocalUiAlpha provides uiAlphaF
+        ) { content() }
     }
 
     if (!onboarded) {
@@ -181,17 +194,20 @@ fun PhysicApp() {
     val bgImg by Prefs.customBgImg(c).collectAsState(initial = "")
     val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
     val isLight = theme.bg.luminance() > 0.5f
+    val surfA = theme.surface.copy(alpha = uiAlphaF)
     val m3Scheme = if (isLight) {
         androidx.compose.material3.lightColorScheme(
             primary = theme.accent, onPrimary = theme.bg, background = theme.bg, onBackground = theme.text,
-            surface = theme.surface, onSurface = theme.text, surfaceVariant = theme.surface, onSurfaceVariant = theme.subtext,
-            outline = theme.border, secondary = theme.accent
+            surface = surfA, onSurface = theme.text, surfaceVariant = surfA, onSurfaceVariant = theme.subtext,
+            outline = theme.border, secondary = theme.accent, surfaceContainer = surfA, surfaceContainerHigh = surfA, surfaceContainerHighest = surfA,
+            surfaceContainerLow = surfA, surfaceContainerLowest = surfA, surfaceBright = surfA, surfaceDim = surfA
         )
     } else {
         androidx.compose.material3.darkColorScheme(
             primary = theme.accent, onPrimary = theme.bg, background = theme.bg, onBackground = theme.text,
-            surface = theme.surface, onSurface = theme.text, surfaceVariant = theme.surface, onSurfaceVariant = theme.subtext,
-            outline = theme.border, secondary = theme.accent
+            surface = surfA, onSurface = theme.text, surfaceVariant = surfA, onSurfaceVariant = theme.subtext,
+            outline = theme.border, secondary = theme.accent, surfaceContainer = surfA, surfaceContainerHigh = surfA, surfaceContainerHighest = surfA,
+            surfaceContainerLow = surfA, surfaceContainerLowest = surfA, surfaceBright = surfA, surfaceDim = surfA
         )
     }
     androidx.compose.material3.MaterialTheme(colorScheme = m3Scheme, typography = androidx.compose.material3.Typography().run {
@@ -274,7 +290,7 @@ fun PhysicApp() {
                 // ---- now playing panel ----
                 if (title.isNotEmpty()) {
                     val cur = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: 0)
-                    Column(Modifier.fillMaxWidth().heightIn(min = 140.dp).border(1.dp, theme.border, shape).background(theme.surface, shape).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.fillMaxWidth().heightIn(min = 140.dp).border(1.dp, theme.border, shape).background(theme.surface.copy(alpha = LocalUiAlpha.current), shape).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Now playing!", color = theme.accent, fontSize = 12.sp)
                             val favSong by Prefs.favSong(c).collectAsState(initial = "")
@@ -423,9 +439,95 @@ fun SpinningDisc(sizeDp: Int) {
     }
 }
 
+/** Mini chrome-dino runner, colors pulled from the active theme. */
+@Composable
+fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier = Modifier) {
+    var dinoY by remember { mutableStateOf(0f) }
+    var vy by remember { mutableStateOf(0f) }
+    var obsX by remember { mutableStateOf(1f) }
+    var speed by remember { mutableStateOf(0.16f) }
+    var score by remember { mutableStateOf(0) }
+    var dead by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(false) }
+    val dinoW = 26f
+    val dinoH = 30f
+    val obsW = 12f
+    val obsH = 34f
+
+    LaunchedEffect(Unit) {
+        var last = 0L
+        while (true) {
+            withFrameNanos { now ->
+                if (last != 0L && !dead) {
+                    val dt = ((now - last) / 1_000_000_000f).coerceAtMost(0.05f)
+                    if (running) {
+                        vy -= 1200f * dt
+                        dinoY += vy * dt
+                        if (dinoY <= 0f) { dinoY = 0f; vy = 0f }
+                        obsX -= speed * dt
+                        score += (speed * dt * 60).toInt()
+                        if (obsX < -0.15f) { obsX = 1.05f; speed = (speed + 0.0008f).coerceAtMost(0.42f) }
+                        val dinoRight = 0.06f + dinoW / 1000f
+                        val hitX = obsX < dinoRight && obsX + obsW / 1000f > 0.06f
+                        val hitY = dinoY < obsH - 12f
+                        if (hitX && hitY) { dead = true; running = false }
+                    }
+                }
+                last = now
+            }
+        }
+    }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .clip(shape)
+            .background(theme.surface.copy(alpha = LocalUiAlpha.current), shape)
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    if (dead) { dead = false; score = 0; obsX = 1f; speed = 0.16f; dinoY = 0f; vy = 0f; running = true }
+                    else if (!running) running = true
+                    if (dinoY <= 0f) vy = 430f
+                }
+            }
+    ) {
+        val w = size.width
+        val h = size.height
+        val groundY = h - 18f
+        // ground line
+        drawRect(theme.border.copy(alpha = 0.6f), androidx.compose.ui.geometry.Offset(0f, groundY), androidx.compose.ui.geometry.Size(w, 1.5f))
+        // dino
+        val dx = w * 0.06f
+        val dy = groundY - dinoH - dinoY
+        drawRect(theme.accent, androidx.compose.ui.geometry.Offset(dx, dy), androidx.compose.ui.geometry.Size(dinoW, dinoH))
+        drawRect(theme.accent, androidx.compose.ui.geometry.Offset(dx + dinoW - 6f, dy - 8f), androidx.compose.ui.geometry.Size(8f, 10f))
+        drawRect(theme.bg, androidx.compose.ui.geometry.Offset(dx + dinoW - 9f, dy + 6f), androidx.compose.ui.geometry.Size(4f, 4f))
+        // obstacle
+        if (obsX < 1.1f) {
+            val ox = w * obsX
+            drawRect(theme.text, androidx.compose.ui.geometry.Offset(ox, groundY - obsH), androidx.compose.ui.geometry.Size(obsW, obsH))
+            drawRect(theme.text, androidx.compose.ui.geometry.Offset(ox - 3f, groundY - obsH - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
+            drawRect(theme.text, androidx.compose.ui.geometry.Offset(ox + obsW - 2f, groundY - obsH - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
+        }
+        // hud
+        drawContext.canvas.nativeCanvas.drawText(
+            if (dead) "GAME OVER · tap to retry" else if (running) "score ${score}" else "tap to play",
+            10f, 18f, android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(
+                    (theme.subtext.alpha * 255).toInt(),
+                    (theme.subtext.red * 255).toInt(), (theme.subtext.green * 255).toInt(), (theme.subtext.blue * 255).toInt()
+                )
+                textSize = 12f
+                isAntiAlias = true
+            }
+        )
+    }
+}
+
 @Composable
 fun Panel(title: String, theme: ThemeColors, modifier: Modifier = Modifier, shape: RoundedCornerShape, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.border(1.dp, theme.border, shape).background(theme.surface, shape).padding(12.dp)) {
+    Column(modifier.border(1.dp, theme.border, shape).background(theme.surface.copy(alpha = LocalUiAlpha.current), shape).padding(12.dp)) {
         Text(L.tr(title).uppercase(), color = theme.subtext, fontSize = 11.sp, letterSpacing = 2.sp)
         Spacer(Modifier.height(8.dp))
         content()
@@ -515,6 +617,8 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         Panel("welcome — tap to edit", theme, shape = shape) {
             Text(welcome, color = theme.text, fontSize = 18.sp, modifier = Modifier.clickable { editWelcome = true })
         }
+
+        DinoGame(theme, shape)
 
         Panel("most played", theme, shape = shape) {
             if (topSongList.isEmpty()) Text(L.tr("no plays yet"), color = theme.subtext, fontSize = 13.sp)
@@ -952,7 +1056,7 @@ fun StatsTab(theme: ThemeColors) {
 
 @Composable
 fun StatCard(title: String, items: List<Pair<String, Int>>, theme: ThemeColors, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().border(1.dp, theme.border).background(theme.surface).clickable { onClick() }.padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().border(1.dp, theme.border).background(theme.surface.copy(alpha = LocalUiAlpha.current)).clickable { onClick() }.padding(12.dp)) {
         Text(L.tr(title).uppercase(), color = theme.accent, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
         if (items.isEmpty()) Text(L.tr("no data"), color = theme.subtext, fontSize = 12.sp)
@@ -1277,6 +1381,10 @@ fun SettingsTab(
             }
             Text("background image opacity: $bgAlphaPct%", color = theme.text, fontSize = 13.sp)
             Slider(value = bgAlphaPct.toFloat(), onValueChange = { v -> scope.launch { Prefs.setBgAlpha(c, v.toInt().coerceIn(0, 100)) } }, valueRange = 0f..100f,
+                colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
+            val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
+            Text("ui panel opacity (with bg): $uiAlpha%", color = theme.text, fontSize = 13.sp)
+            Slider(value = uiAlpha.toFloat(), onValueChange = { v -> scope.launch { Prefs.setUiAlpha(c, v.toInt().coerceIn(15, 100)) } }, valueRange = 15f..100f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
         }
         Panel("customization", theme, shape = RoundedCornerShape(0.dp)) {
