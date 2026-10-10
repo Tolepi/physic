@@ -53,6 +53,8 @@ object Prefs {
     private val UI_ALPHA = intPreferencesKey("ui_alpha")
     private val FONT_SCALE = floatPreferencesKey("font_scale")
     private val LINE_HEIGHT_SCALE = floatPreferencesKey("line_height_scale")
+    // NOTE: 0f = "auto" (no explicit lineHeight applied) so the app keeps the
+    // same look as 1.5.2.1 by default. Anything > 0 is treated as a multiplier.
 
     fun theme(c: Context) = c.ds.data.map { it[THEME] ?: "System24" }
     fun rounded(c: Context) = c.ds.data.map { it[ROUNDED] ?: false }
@@ -101,10 +103,13 @@ object Prefs {
     fun bgAlpha(c: Context) = c.ds.data.map { it[BG_ALPHA] ?: 45 }
     suspend fun setBgAlpha(c: Context, v: Int) = c.ds.edit { it[BG_ALPHA] = v }
     fun uiAlpha(c: Context) = c.ds.data.map { it[UI_ALPHA] ?: 100 }
+    private val DINO_BEST = intPreferencesKey("dino_best")
+    fun dinoBest(c: Context) = c.ds.data.map { it[DINO_BEST] ?: 0 }
+    suspend fun setDinoBest(c: Context, v: Int) = c.ds.edit { it[DINO_BEST] = v }
     suspend fun setUiAlpha(c: Context, v: Int) = c.ds.edit { it[UI_ALPHA] = v }
     fun fontScale(c: Context) = c.ds.data.map { it[FONT_SCALE] ?: 1.0f }
     suspend fun setFontScale(c: Context, v: Float) = c.ds.edit { it[FONT_SCALE] = v }
-    fun lineHeightScale(c: Context) = c.ds.data.map { it[LINE_HEIGHT_SCALE] ?: 1.0f }
+    fun lineHeightScale(c: Context) = c.ds.data.map { it[LINE_HEIGHT_SCALE] ?: 0f }
     suspend fun setLineHeightScale(c: Context, v: Float) = c.ds.edit { it[LINE_HEIGHT_SCALE] = v }
 
     /** Serialize every preference + data file into one JSON blob. */

@@ -167,7 +167,9 @@ fun PhysicApp() {
     }
     val onboarded by Prefs.onboarded(c).collectAsState(initial = false)
     val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
-    val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 1f)
+    // 0f == "auto": no lineHeight override, so the default look matches 1.5.2.1
+    val lineHeightPref by Prefs.lineHeightScale(c).collectAsState(initial = 0f)
+    val lineHeightTextStyle = if (lineHeightPref > 0f) TextStyle(lineHeight = (14 * lineHeightPref).sp) else TextStyle()
     val bgImgEarly by Prefs.customBgImg(c).collectAsState(initial = "")
     val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
     val uiAlphaF = if (bgImgEarly.isNotEmpty()) (uiAlpha / 100f).coerceIn(0.15f, 1f) else 1f
@@ -186,7 +188,7 @@ fun PhysicApp() {
 
     if (!onboarded) {
         Surface(Modifier.fillMaxSize(), color = theme.bg) {
-            Wrap { ProvideTextStyle(TextStyle(fontFamily = fontFamily, lineHeight = (14 * lineHeightScale).sp)) { OnboardingScreen(theme) } }
+            Wrap { ProvideTextStyle(TextStyle(fontFamily = fontFamily).merge(lineHeightTextStyle)) { OnboardingScreen(theme) } }
         }
         return
     }
@@ -224,7 +226,7 @@ fun PhysicApp() {
     Box(Modifier.fillMaxSize().background(theme.bg)) {
         if (bgImg.isNotEmpty()) AsyncImage(model = bgImg, contentDescription = null,
             modifier = Modifier.fillMaxSize().alpha(bgAlphaPct / 100f), contentScale = ContentScale.Fit)
-        ProvideTextStyle(TextStyle(fontFamily = fontFamily, lineHeight = (14 * lineHeightScale).sp)) {
+        ProvideTextStyle(TextStyle(fontFamily = fontFamily).merge(lineHeightTextStyle)) {
             val imageLoader = remember {
                 coil.ImageLoader.Builder(c)
                     .components {
@@ -439,39 +441,99 @@ fun SpinningDisc(sizeDp: Int) {
     }
 }
 
-/** Mini chrome-dino runner, colors pulled from the active theme. */
+/** Mini chrome-dino runner with score, high score, coins, day/night and multiple obstacle types. */
+private data class DinoObstacle(val x: Float, val kind: Int, val yOff: Float = 0f, val w: Float, val h: Float)
+
 @Composable
 fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var running by remember { mutableStateOf(false) }
+    var dead by remember { mutableStateOf(false) }
     var dinoY by remember { mutableStateOf(0f) }
     var vy by remember { mutableStateOf(0f) }
-    var obsX by remember { mutableStateOf(1f) }
-    var speed by remember { mutableStateOf(0.16f) }
+    var speed by remember { mutableStateOf(0.22f) }
     var score by remember { mutableStateOf(0) }
-    var dead by remember { mutableStateOf(false) }
-    var running by remember { mutableStateOf(false) }
+    var coins by remember { mutableStateOf(0) }
+    var obstacles by remember { mutableStateOf(listOf<DinoObstacle>()) }
+    var groundOffset by remember { mutableStateOf(0f) }
+    var night by remember { mutableStateOf(false) }
+    var jumped by remember { mutableStateOf(false) }
+    var best by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        best = kotlinx.coroutines.runBlocking { Prefs.dinoBest(ctx).first() }
+    }
+
     val dinoW = 26f
     val dinoH = 30f
-    val obsW = 12f
-    val obsH = 34f
+
+    fun reset() {
+        score = 0; coins = 0; speed = 0.22f; dinoY = 0f; vy = 0f; groundOffset = 0f
+        obstacles = listOf(DinoObstacle(1f, 0, 0f, 12f, 34f), DinoObstacle(1.5f, 0, 0f, 12f, 34f))
+        dead = false; running = true
+    }
 
     LaunchedEffect(Unit) {
         var last = 0L
+        val rnd = java.util.Random()
         while (true) {
             withFrameNanos { now ->
-                if (last != 0L && !dead) {
-                    val dt = ((now - last) / 1_000_000_000f).coerceAtMost(0.05f)
-                    if (running) {
-                        vy -= 1200f * dt
-                        dinoY += vy * dt
-                        if (dinoY <= 0f) { dinoY = 0f; vy = 0f }
-                        obsX -= speed * dt
-                        score += (speed * dt * 60).toInt()
-                        if (obsX < -0.15f) { obsX = 1.05f; speed = (speed + 0.0008f).coerceAtMost(0.42f) }
-                        val dinoRight = 0.06f + dinoW / 1000f
-                        val hitX = obsX < dinoRight && obsX + obsW / 1000f > 0.06f
-                        val hitY = dinoY < obsH - 12f
-                        if (hitX && hitY) { dead = true; running = false }
+                if (last != 0L && running && !dead) {
+                    val dt = ((now - last) / 1_000_000_000f).coerceAtMost(0.04f)
+                    // physics
+                    vy -= 1500f * dt
+                    dinoY += vy * dt
+                    if (dinoY <= 0f) { dinoY = 0f; vy = 0f }
+                    val step = speed * dt
+                    groundOffset = (groundOffset + step * 400f) % 40f
+                    score += (step * 120f).toInt()
+                    if (score > 0 && score % 700 < 3) night = !night
+
+                    var list = obstacles.map { it.copy(x = it.x - step / 0.9f) }
+                    // spawn
+                    val lastX = list.maxOfOrNull { it.x } ?: -1f
+                    if (lastX < 0.55f) {
+                        val kind = when {
+                            speed < 0.32f -> 0
+                            speed < 0.45f -> rnd.nextInt(3)
+                            else -> rnd.nextInt(4)
+                        }
+                        val obs = when (kind) {
+                            0 -> DinoObstacle(1.02f, 0, 0f, 12f, 34f)
+                            1 -> DinoObstacle(1.02f, 1, 0f, 20f, 44f)
+                            2 -> DinoObstacle(1.02f, 2, 0f, 22f, 16f)          // low bird: jump over
+                            else -> DinoObstacle(1.02f, 2, 26f, 22f, 16f)  // high bird: run under
+                        }
+                        list = list + obs
+                        if (speed > 0.34f && rnd.nextInt(3) == 0) {
+                            list = list + DinoObstacle(1.02f + (0.18f + rnd.nextFloat() * 0.12f), 0, 0f, 12f, 34f)
+                        }
                     }
+                    list = list.filter { it.x > -0.2f }
+
+                    // coin pickup
+                    val newCoins = list.count { o ->
+                        o.kind == 3 && o.x < 0.06f + dinoW / 1000f && o.x + 0.02f > 0.06f
+                    }
+                    if (newCoins > 0) {
+                        coins += newCoins
+                        list = list.filterNot { it.kind == 3 && it.x < 0.06f + dinoW / 1000f }
+                    }
+
+                    // collisions
+                    val hit = list.any { o ->
+                        val dinoRight = 0.06f + dinoW / 1000f
+                        val hitX = o.x < dinoRight && o.x + o.w / 1000f > 0.06f
+                        val hitY = dinoY < (o.h + o.yOff) - 8f
+                        hitX && hitY
+                    }
+                    if (hit) {
+                        dead = true; running = false
+                        if (score > best) { best = score; scope.launch { Prefs.setDinoBest(ctx, best) } }
+                    }
+                    obstacles = list
+                    speed = (speed + dt * 0.012f).coerceAtMost(0.85f)
                 }
                 last = now
             }
@@ -481,47 +543,113 @@ fun DinoGame(theme: ThemeColors, shape: RoundedCornerShape, modifier: Modifier =
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(140.dp)
+            .height(150.dp)
             .clip(shape)
             .background(theme.surface.copy(alpha = LocalUiAlpha.current), shape)
             .pointerInput(Unit) {
-                detectTapGestures {
-                    if (dead) { dead = false; score = 0; obsX = 1f; speed = 0.16f; dinoY = 0f; vy = 0f; running = true }
-                    else if (!running) running = true
-                    if (dinoY <= 0f) vy = 430f
-                }
+                detectTapGestures(
+                    onTap = {
+                        when {
+                            dead -> reset()
+                            !running -> running = true
+                            dinoY <= 0f -> { vy = 520f; jumped = true }
+                        }
+                    },
+                    onDoubleTap = { if (!dead && running && dinoY <= 0f) vy = 780f }  // super jump
+                )
             }
     ) {
         val w = size.width
         val h = size.height
         val groundY = h - 18f
-        // ground line
+        val ink = if (night) theme.subtext else theme.text
+        val inkAccent = if (night) theme.subtext else theme.accent
+
+        // sky tint when night
+        if (night) drawRect(theme.bg.copy(alpha = 0.35f), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(w, h))
+
+        // scrolling ground dashes
         drawRect(theme.border.copy(alpha = 0.6f), androidx.compose.ui.geometry.Offset(0f, groundY), androidx.compose.ui.geometry.Size(w, 1.5f))
+        var gx = -groundOffset
+        while (gx < w) {
+            drawRect(theme.border.copy(alpha = 0.4f), androidx.compose.ui.geometry.Offset(gx, groundY + 2f), androidx.compose.ui.geometry.Size(10f, 1.5f))
+            gx += 20f
+        }
+
+        // obstacles
+        obstacles.forEach { o ->
+            val ox = w * o.x
+            val oy = groundY - o.h - o.yOff
+            when (o.kind) {
+                0 -> {
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox, oy), androidx.compose.ui.geometry.Size(o.w, o.h))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox - 3f, oy - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 2f, oy - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
+                }
+                1 -> {
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox, oy + 8f), androidx.compose.ui.geometry.Size(o.w, o.h - 8f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox - 2f, oy), androidx.compose.ui.geometry.Size(7f, 10f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 5f, oy + 2f), androidx.compose.ui.geometry.Size(7f, 8f))
+                }
+                2 -> {
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox, oy + 4f), androidx.compose.ui.geometry.Size(o.w, o.h - 8f))
+                    drawRect(ink, androidx.compose.ui.geometry.Offset(ox + o.w - 4f, oy), androidx.compose.ui.geometry.Size(4f, o.h))
+                }
+                3 -> {
+                    drawCircle(theme.accent, 6f, androidx.compose.ui.geometry.Offset(ox + 8f, oy + 8f))
+                }
+            }
+        }
+
         // dino
         val dx = w * 0.06f
         val dy = groundY - dinoH - dinoY
-        drawRect(theme.accent, androidx.compose.ui.geometry.Offset(dx, dy), androidx.compose.ui.geometry.Size(dinoW, dinoH))
-        drawRect(theme.accent, androidx.compose.ui.geometry.Offset(dx + dinoW - 6f, dy - 8f), androidx.compose.ui.geometry.Size(8f, 10f))
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx, dy), androidx.compose.ui.geometry.Size(dinoW, dinoH))
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + dinoW - 6f, dy - 8f), androidx.compose.ui.geometry.Size(8f, 10f))
         drawRect(theme.bg, androidx.compose.ui.geometry.Offset(dx + dinoW - 9f, dy + 6f), androidx.compose.ui.geometry.Size(4f, 4f))
-        // obstacle
-        if (obsX < 1.1f) {
-            val ox = w * obsX
-            drawRect(theme.text, androidx.compose.ui.geometry.Offset(ox, groundY - obsH), androidx.compose.ui.geometry.Size(obsW, obsH))
-            drawRect(theme.text, androidx.compose.ui.geometry.Offset(ox - 3f, groundY - obsH - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
-            drawRect(theme.text, androidx.compose.ui.geometry.Offset(ox + obsW - 2f, groundY - obsH - 6f), androidx.compose.ui.geometry.Size(5f, 6f))
-        }
-        // hud
-        drawContext.canvas.nativeCanvas.drawText(
-            if (dead) "GAME OVER · tap to retry" else if (running) "score ${score}" else "tap to play",
-            10f, 18f, android.graphics.Paint().apply {
-                color = android.graphics.Color.argb(
-                    (theme.subtext.alpha * 255).toInt(),
-                    (theme.subtext.red * 255).toInt(), (theme.subtext.green * 255).toInt(), (theme.subtext.blue * 255).toInt()
-                )
-                textSize = 12f
-                isAntiAlias = true
+        // legs wiggle while running
+        val legPhase = if (running && !dead) (groundOffset / 5f) % 4f else 0f
+        val legY = groundY - (if (legPhase < 2f) 0f else 4f)
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + 3f, legY - 5f), androidx.compose.ui.geometry.Size(5f, 5f))
+        drawRect(inkAccent, androidx.compose.ui.geometry.Offset(dx + dinoW - 9f, groundY - (if (legPhase < 2f) 4f else 0f) - 5f), androidx.compose.ui.geometry.Size(5f, 5f))
+
+        // stars when night
+        if (night) {
+            var sx = 12f
+            var i = 0
+            while (sx < w - 8f) {
+                drawCircle(theme.accent.copy(alpha = 0.6f), 1.6f, androidx.compose.ui.geometry.Offset(sx, 14f + (i % 3) * 8f))
+                sx += 37f; i++
             }
-        )
+        }
+
+        // hud
+        val paint = android.graphics.Paint().apply {
+            isAntiAlias = true; textSize = 13f
+            color = android.graphics.Color.argb(
+                (theme.subtext.alpha * 255).toInt(),
+                (theme.subtext.red * 255).toInt(), (theme.subtext.green * 255).toInt(), (theme.subtext.blue * 255).toInt()
+            )
+        }
+        val bigPaint = android.graphics.Paint().apply {
+            isAntiAlias = true; textSize = 18f
+            color = android.graphics.Color.argb(
+                (ink.alpha * 255).toInt(),
+                (ink.red * 255).toInt(), (ink.green * 255).toInt(), (ink.blue * 255).toInt()
+            )
+        }
+        drawContext.canvas.nativeCanvas.apply {
+            drawText("score $score   ★$coins   hi $best", 10f, 18f, paint)
+            when {
+                dead -> {
+                    drawText("GAME OVER", w / 2f - 46f, h / 2f, bigPaint)
+                    drawText("tap to retry", w / 2f - 38f, h / 2f + 18f, paint)
+                }
+                !running -> drawText("tap to play · double-tap = super jump", w / 2f - 110f, h / 2f, paint)
+                night -> drawText("☾ night", w - 46f, 18f, paint)
+            }
+            if (jumped && running && !dead) drawText("⇡", dx, dy - 6f, paint)
+        }
     }
 }
 
@@ -1344,7 +1472,7 @@ fun SettingsTab(
         val eqVertical by Prefs.eqVertical(c).collectAsState(initial = false)
         val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
         val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
-        val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 1f)
+        val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 0f)
         val backupMsg by remember { mutableStateOf("") }
         var backupText by remember { mutableStateOf("") }
         val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -1395,8 +1523,12 @@ fun SettingsTab(
             Text("font size: ${(fontScale * 100).toInt()}%", color = theme.text, fontSize = 13.sp)
             Slider(value = fontScale, onValueChange = { v -> scope.launch { Prefs.setFontScale(c, (v * 20).toInt() / 20f) } }, valueRange = 0.7f..2.0f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
-            Text("line height: ${(lineHeightScale * 100).toInt()}%", color = theme.text, fontSize = 13.sp)
-            Slider(value = lineHeightScale, onValueChange = { v -> scope.launch { Prefs.setLineHeightScale(c, (v * 20).toInt() / 20f) } }, valueRange = 0.8f..2.5f,
+            val lhShown = if (lineHeightScale <= 0f) 1f else lineHeightScale
+            Text("line height: ${if (lineHeightScale <= 0f) "default" else "${(lineHeightScale * 100).toInt()}%"}", color = theme.text, fontSize = 13.sp)
+            Slider(value = lhShown, onValueChange = { v ->
+                // snapping to the left end returns to "auto" (0f)
+                scope.launch { Prefs.setLineHeightScale(c, if (v <= 0.85f) 0f else (v * 20).toInt() / 20f) }
+            }, valueRange = 0.8f..2.5f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
             Text("song row padding: ${rowPad}dp", color = theme.text, fontSize = 13.sp)
             Slider(value = rowPad.toFloat(), onValueChange = { v -> scope.launch { Prefs.setRowPad(c, v.toInt().coerceIn(0, 24)) } }, valueRange = 0f..24f,
