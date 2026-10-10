@@ -1,81 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Physic mark: white chick-bird silhouette with black eye and pointed beak on black. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
+    android:viewportWidth="512" android:viewportHeight="512">
 
-    <!-- ============ tail feathers (behind body) ============ -->
-    <path android:fillColor="#FF6E6E6E"
-        android:pathData="M38,62 L12,54 L14,60 L38,70 Z" />
-    <path android:fillColor="#FF8A8A8A"
-        android:pathData="M38,66 L14,66 L16,72 L39,74 Z" />
-    <path android:fillColor="#FFB4B4B4"
-        android:pathData="M38,70 L17,76 L21,81 L40,78 Z" />
-    <path android:fillColor="#FF565656"
-        android:pathData="M40,58 L13,46 L14,52 L41,64 Z" />
+    <!-- black background -->
+    <path android:fillColor="#FF000000"
+        android:pathData="M0,0h512v512h-512z" />
 
-    <!-- ============ legs ============ -->
-    <path android:fillColor="#FF6E6E6E"
-        android:pathData="M46,74 L48,74 L47,88 L44,88 Z" />
-    <path android:fillColor="#FF6E6E6E"
-        android:pathData="M57,74 L59,74 L60,88 L57,88 Z" />
-    <!-- feet -->
-    <path android:fillColor="#FF9A9A9A"
-        android:pathData="M44,87 L50,87 L50,90 L43,90 Z" />
-    <path android:fillColor="#FF9A9A9A"
-        android:pathData="M56,87 L62,87 L63,90 L56,90 Z" />
-
-    <!-- ============ body ============ -->
+    <!-- beak (behind body so the join is clean) -->
     <path android:fillColor="#FFFFFFFF"
-        android:pathData="M42,44 C52,38 66,38 74,44 C80,49 80,60 74,66 C66,73 50,73 42,66 C36,60 36,49 42,44 Z" />
-    <!-- chest shading -->
-    <path android:fillColor="#FFDDDDDD"
-        android:pathData="M66,44 C74,48 76,58 71,65 C68,68 64,70 59,71 C66,64 68,53 66,44 Z" />
-    <!-- belly -->
-    <path android:fillColor="#FFF2F2F2"
-        android:pathData="M45,62 C52,68 62,68 69,63 C66,70 54,72 46,66 Z" />
+        android:pathData="M352,214 L450,176 L368,302 Z" />
 
-    <!-- ============ head ============ -->
+    <!-- body: dome top, straight sides, extends past the bottom edge -->
     <path android:fillColor="#FFFFFFFF"
-        android:pathData="M66,30 C74,29 80,35 79,42 C78,49 71,53 65,50 C60,47 60,33 66,30 Z" />
-    <!-- crown / tuft -->
-    <path android:fillColor="#FFE8E8E8"
-        android:pathData="M64,31 C68,25 76,25 79,30 C74,29 69,29 64,31 Z" />
-    <!-- beak -->
-    <path android:fillColor="#FF9A9A9A"
-        android:pathData="M78,38 L89,41 L78,45 Z" />
-    <path android:fillColor="#FF6E6E6E"
-        android:pathData="M78,42 L86,42 L78,45 Z" />
-    <!-- eye socket -->
-    <path android:fillColor="#FF101010"
-        android:pathData="M70,36 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+        android:pathData="M86,512 L86,272 C86,186 152,120 238,120 C322,120 386,166 388,254 L394,512 Z" />
+
     <!-- eye -->
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M70,36 m-2.4,0 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0" />
-    <!-- pupil -->
-    <path android:fillColor="#FF101010"
-        android:pathData="M70,36 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0" />
-    <!-- eye glint -->
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M71.2,34.6 m-0.7,0 a0.7,0.7 0 1,0 1.4,0 a0.7,0.7 0 1,0 -1.4,0" />
-    <!-- throat feathers -->
-    <path android:fillColor="#FFB4B4B4"
-        android:pathData="M63,47 L70,50 L64,54 Z" />
-    <path android:fillColor="#FF8A8A8A"
-        android:pathData="M60,44 L68,48 L61,53 Z" />
-
-    <!-- ============ wing (layered) ============ -->
-    <path android:fillColor="#FFE0E0E0"
-        android:pathData="M42,50 C50,46 62,46 68,52 C62,60 48,62 42,56 Z" />
-    <path android:fillColor="#FFB4B4B4"
-        android:pathData="M44,53 C50,50 58,50 63,54 C58,58 48,59 44,56 Z" />
-    <path android:fillColor="#FF8A8A8A"
-        android:pathData="M46,56 C50,54 56,54 59,56 C55,58 49,58 46,57 Z" />
-    <!-- primaries -->
-    <path android:fillColor="#FF6E6E6E"
-        android:pathData="M43,55 L28,64 L43,64 Z" />
-    <path android:fillColor="#FF8A8A8A"
-        android:pathData="M43,58 L30,68 L44,67 Z" />
-    <!-- shoulder highlight -->
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M45,48 C50,46 56,46 60,48 C55,49 49,49 45,49 Z" />
+    <path android:fillColor="#FF000000"
+        android:pathData="M245,220 m-21,0 a21,21 0 1,0 42,0 a21,21 0 1,0 -42,0" />
 </vector>
