@@ -114,7 +114,11 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionsLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            // Recomposition will handle UI update based on hasPermissions state
+            val allGranted = permissions.values.all { it }
+            if (allGranted) {
+                // Restart the activity to re-check permissions and start the app
+                recreate()
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,13 +126,37 @@ class MainActivity : ComponentActivity() {
 
         val hasPermissions = permissionsArray.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
 
-        if (hasPermissions) {
+        // Even if permissions are granted, verify they actually work by querying MediaStore
+        val permissionsActuallyWork = if (hasPermissions) {
+            try {
+                contentResolver.query(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Audio.Media._ID),
+                    null, null, null
+                )?.use { it.count >= 0 } ?: false
+            } catch (e: Exception) {
+                false
+            }
+        } else false
+
+        if (hasPermissions && permissionsActuallyWork) {
             startService(android.content.Intent(this, MusicService::class.java))
             setContent { PhysicApp() }
         } else {
             setContent {
                 PermissionScreen(onRequestPermissions = {
-                    requestPermissionsLauncher.launch(permissionsArray)
+                    val shouldShowRationale = permissionsArray.any { permission ->
+                        shouldShowRequestPermissionRationale(permission)
+                    }
+                    if (shouldShowRationale) {
+                        requestPermissionsLauncher.launch(permissionsArray)
+                    } else {
+                        // Permission was denied permanently - open settings
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        val uri = android.net.Uri.fromParts("package", packageName, null)
+                        intent.data = uri
+                        startActivity(intent)
+                    }
                 })
             }
         }

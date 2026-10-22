@@ -26,6 +26,7 @@ object MusicIndex {
     fun requestRescan() { rescanTick.intValue++ }
     fun foldersOfLibrary(c: Context): Set<String> {
         val set = mutableSetOf<String>()
+        // Try RELATIVE_PATH first (Android 10+)
         val col = MediaStore.Audio.Media.RELATIVE_PATH
         c.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -40,6 +41,27 @@ object MusicIndex {
                     set.add(p)
                     val parts = p.split('/')
                     for (k in 1 until parts.size) set.add(parts.subList(0, k).joinToString("/"))
+                }
+            }
+        }
+        // Fallback: use DATA column if RELATIVE_PATH didn't return results
+        if (set.isEmpty()) {
+            c.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Audio.Media.DATA),
+                "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+                null, null
+            )?.use { cur ->
+                val i = cur.getColumnIndex(MediaStore.Audio.Media.DATA)
+                while (cur.moveToNext()) {
+                    val path = cur.getString(i) ?: continue
+                    val dir = path.substringBeforeLast('/')
+                    val relative = dir.substringAfter("/storage/emulated/0/", dir)
+                    if (relative.isNotEmpty()) {
+                        set.add(relative)
+                        val parts = relative.split('/')
+                        for (k in 1 until parts.size) set.add(parts.subList(0, k).joinToString("/"))
+                    }
                 }
             }
         }
