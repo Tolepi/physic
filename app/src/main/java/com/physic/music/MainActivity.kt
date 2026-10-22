@@ -72,6 +72,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import androidx.glance.appwidget.updateAll
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -142,6 +144,12 @@ class MainActivity : ComponentActivity() {
         if (hasPermissions && permissionsActuallyWork) {
             startService(android.content.Intent(this, MusicService::class.java))
             setContent { PhysicApp() }
+            // Update widget on app start
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                try {
+                    MusicWidget().updateAll(this@MainActivity)
+                } catch (e: Exception) {}
+            }
         } else {
             setContent {
                 PermissionScreen(onRequestPermissions = {
@@ -409,7 +417,7 @@ fun PhysicApp() {
                                 inactiveTrackColor = theme.border
                             )
                         )
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Shuffle, "shuffle", tint = if (shuffleOn) theme.accent else theme.subtext,
                                 modifier = Modifier.clickable {
                                     scope.launch { Prefs.setShuffle(c, !shuffleOn); Playback.player?.shuffleModeEnabled = !shuffleOn }
