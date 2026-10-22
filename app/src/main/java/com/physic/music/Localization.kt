@@ -1,5 +1,7 @@
 package com.physic.music
 
+import android.content.Context
+import kotlinx.coroutines.flow.firstOrNull
 import java.util.Locale
 
 object L {
@@ -127,7 +129,8 @@ object L {
         "most played songs" to "الأكثر تشغيلاً", "top albums" to "الألبومات", "top artists" to "الفنانين",
     )
 
-    fun tr(s: String, lang: String = Locale.getDefault().language): String = when (lang) {
+    // internal lookup without context (for non-Compose contexts)
+    private fun trInternal(s: String, lang: String): String = when (lang) {
         "es" -> es[s]
         "fr" -> fr[s]
         "de" -> de[s]
@@ -140,4 +143,14 @@ object L {
         "ar" -> ar[s]
         else -> null
     } ?: s
+
+    /** Translates using the app's configured language preference. */
+    fun tr(c: Context, s: String): String {
+        val lang = kotlinx.coroutines.runBlocking { Prefs.language(c).firstOrNull() } ?: ""
+        val langCode = if (lang.isEmpty()) Locale.getDefault().language else lang
+        return trInternal(s, langCode)
+    }
+
+    /** Translates using an explicit language code. */
+    fun tr(s: String, langCode: String): String = trInternal(s, langCode)
 }

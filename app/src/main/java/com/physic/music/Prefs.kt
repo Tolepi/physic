@@ -103,9 +103,9 @@ object Prefs {
     fun bgAlpha(c: Context) = c.ds.data.map { it[BG_ALPHA] ?: 45 }
     suspend fun setBgAlpha(c: Context, v: Int) = c.ds.edit { it[BG_ALPHA] = v }
     fun uiAlpha(c: Context) = c.ds.data.map { it[UI_ALPHA] ?: 100 }
-    private val DINO_BEST = intPreferencesKey("dino_best")
-    fun dinoBest(c: Context) = c.ds.data.map { it[DINO_BEST] ?: 0 }
-    suspend fun setDinoBest(c: Context, v: Int) = c.ds.edit { it[DINO_BEST] = v }
+    private val LANGUAGE = stringPreferencesKey("language")
+    fun language(c: Context) = c.ds.data.map { it[LANGUAGE] ?: "" }
+    suspend fun setLanguage(c: Context, v: String) = c.ds.edit { it[LANGUAGE] = v }
     suspend fun setUiAlpha(c: Context, v: Int) = c.ds.edit { it[UI_ALPHA] = v }
     fun fontScale(c: Context) = c.ds.data.map { it[FONT_SCALE] ?: 1.0f }
     suspend fun setFontScale(c: Context, v: Float) = c.ds.edit { it[FONT_SCALE] = v }

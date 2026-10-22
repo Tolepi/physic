@@ -1,7 +1,10 @@
 package com.physic.music
 
+import android.Manifest
 import android.content.ContentUris
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
@@ -9,6 +12,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.basicMarquee
@@ -24,11 +33,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.MusicNote
@@ -58,6 +62,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,12 +77,61 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+@Composable
+fun PermissionScreen(onRequestPermissions: () -> Unit) {
+    MaterialTheme {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "Physic needs storage permission to access your music files",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(24.dp)
+                )
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.padding(top = 24.dp)
+                ) {
+                    Text("Grant Permission")
+                }
+            }
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
+    private val permissionsArray = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+    else
+        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.POST_NOTIFICATIONS)
+
+    private val requestPermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            // Recomposition will handle UI update based on hasPermissions state
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestPermissions(arrayOf("android.permission.READ_MEDIA_AUDIO", "android.permission.POST_NOTIFICATIONS"), 1)
-        startService(android.content.Intent(this, MusicService::class.java))
-        setContent { PhysicApp() }
+
+        val hasPermissions = permissionsArray.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+
+        if (hasPermissions) {
+            startService(android.content.Intent(this, MusicService::class.java))
+            setContent { PhysicApp() }
+        } else {
+            setContent {
+                PermissionScreen(onRequestPermissions = {
+                    requestPermissionsLauncher.launch(permissionsArray)
+                })
+            }
+        }
 
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
@@ -114,6 +168,26 @@ fun PhysicApp() {
     val folders by Prefs.folders(c).collectAsState(initial = emptySet())
     val custom by Prefs.custom(c).collectAsState(initial = listOf(null, null, null, null, null, null))
     val fontName by Prefs.fontName(c).collectAsState(initial = "DM Mono")
+    val bgImg by Prefs.customBgImg(c).collectAsState(initial = "")
+    val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
+    val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
+    val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
+    val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 0f)
+    val uiAlphaF = if (bgImg.isNotEmpty()) (uiAlpha / 100f).coerceIn(0.15f, 1f) else 1f
+    val baseDensity = LocalDensity.current
+    val scaledDensity = remember(baseDensity, fontScale) {
+        Density(baseDensity.density, baseDensity.fontScale * fontScale)
+    }
+
+    val lineHeightTextStyle = if (lineHeightScale > 0f) TextStyle(lineHeight = (14 * lineHeightScale).sp) else TextStyle()
+
+    @Composable
+    fun Wrap(content: @Composable () -> Unit) {
+        CompositionLocalProvider(
+            LocalDensity provides scaledDensity,
+            LocalUiAlpha provides uiAlphaF
+        ) { content() }
+    }
 
     val theme = if (themeName == "Custom") {
         fun parse(s: String?, fallback: Color) = s?.removePrefix("#")?.let {
@@ -131,6 +205,7 @@ fun PhysicApp() {
     } else Themes.byName(themeName)
 
     val shape = RoundedCornerShape(if (rounded) 10.dp else 0.dp)
+
     val fontFamily = remember(fontName) {
         val bundled = mapOf(
             "DM Mono" to R.font.dm_mono_regular,
@@ -157,34 +232,8 @@ fun PhysicApp() {
             }
         }
     }
-    val keepScreenOn by Prefs.keepScreenOn(c).collectAsState(initial = true)
-    val activity = c as? android.app.Activity
-    LaunchedEffect(keepScreenOn) {
-        activity?.window?.let {
-            if (keepScreenOn) it.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            else it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-    }
-    val onboarded by Prefs.onboarded(c).collectAsState(initial = false)
-    val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
-    // 0f == "auto": no lineHeight override, so the default look matches 1.5.2.1
-    val lineHeightPref by Prefs.lineHeightScale(c).collectAsState(initial = 0f)
-    val lineHeightTextStyle = if (lineHeightPref > 0f) TextStyle(lineHeight = (14 * lineHeightPref).sp) else TextStyle()
-    val bgImgEarly by Prefs.customBgImg(c).collectAsState(initial = "")
-    val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
-    val uiAlphaF = if (bgImgEarly.isNotEmpty()) (uiAlpha / 100f).coerceIn(0.15f, 1f) else 1f
-    val baseDensity = LocalDensity.current
-    val scaledDensity = remember(baseDensity, fontScale) {
-        Density(baseDensity.density, baseDensity.fontScale * fontScale)
-    }
 
-    @Composable
-    fun Wrap(content: @Composable () -> Unit) {
-        CompositionLocalProvider(
-            LocalDensity provides scaledDensity,
-            LocalUiAlpha provides uiAlphaF
-        ) { content() }
-    }
+    val onboarded by Prefs.onboarded(c).collectAsState(initial = false)
 
     if (!onboarded) {
         Surface(Modifier.fillMaxSize(), color = theme.bg) {
@@ -193,8 +242,6 @@ fun PhysicApp() {
         return
     }
 
-    val bgImg by Prefs.customBgImg(c).collectAsState(initial = "")
-    val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
     val isLight = theme.bg.luminance() > 0.5f
     val surfA = theme.surface.copy(alpha = uiAlphaF)
     val m3Scheme = if (isLight) {
@@ -212,6 +259,7 @@ fun PhysicApp() {
             surfaceContainerLow = surfA, surfaceContainerLowest = surfA, surfaceBright = surfA, surfaceDim = surfA
         )
     }
+
     androidx.compose.material3.MaterialTheme(colorScheme = m3Scheme, typography = androidx.compose.material3.Typography().run {
         copy(
             bodyLarge = bodyLarge.copy(fontFamily = fontFamily, color = theme.text),
@@ -258,7 +306,6 @@ fun PhysicApp() {
             }
 
             Column(Modifier.fillMaxSize().padding(10.dp)) {
-                // top tab bar — tui style
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     listOf("~/home", "~/songs", "~/albums", "~/artists", "~/stats", "~/playlists", "~/eq", "~/settings").forEachIndexed { i, t ->
                         Text(
@@ -289,10 +336,9 @@ fun PhysicApp() {
                     }
                 }
 
-                // ---- now playing panel ----
                 if (title.isNotEmpty()) {
                     val cur = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: 0)
-                    Column(Modifier.fillMaxWidth().heightIn(min = 140.dp).border(1.dp, theme.border, shape).background(theme.surface.copy(alpha = LocalUiAlpha.current), shape).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.fillMaxWidth().heightIn(min = 140.dp).border(1.dp, theme.border, shape).background(theme.surface.copy(alpha = uiAlphaF), shape).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Now playing!", color = theme.accent, fontSize = 12.sp)
                             val favSong by Prefs.favSong(c).collectAsState(initial = "")
@@ -335,7 +381,7 @@ fun PhysicApp() {
                                 inactiveTrackColor = theme.border
                             )
                         )
-                        Box(Modifier.fillMaxWidth()) { Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Shuffle, "shuffle", tint = if (shuffleOn) theme.accent else theme.subtext,
                                 modifier = Modifier.clickable {
                                     scope.launch { Prefs.setShuffle(c, !shuffleOn); Playback.player?.shuffleModeEnabled = !shuffleOn }
@@ -367,7 +413,6 @@ fun PhysicApp() {
                                     }
                                 })
                         }
-                        }
                         val upNext = Playback.queue.value.drop((Playback.player?.currentMediaItemIndex ?: 0) + 1).take(3).joinToString(" · ") { it.title }
                         if (upNext.isNotEmpty()) Text("up next: $upNext", color = theme.subtext, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         LyricsBlock(theme, pos)
@@ -394,7 +439,7 @@ fun LyricsBlock(theme: ThemeColors, posMs: Float) {
         modifier = Modifier.clickable { showLyrics = !showLyrics })
     if (showLyrics) {
         if (doc.isEmpty()) {
-            Text(L.tr("no .lrc sidecar found for this song"), color = theme.subtext, fontSize = 12.sp)
+            Text(L.tr(LocalContext.current, "no .lrc sidecar found for this song"), color = theme.subtext, fontSize = 12.sp)
         } else {
             val idx = doc.indexOfLast { it.first <= pos }.coerceAtLeast(0)
             Column(Modifier.height(180.dp).verticalScroll(rememberScrollState())) {
@@ -410,6 +455,21 @@ fun LyricsBlock(theme: ThemeColors, posMs: Float) {
             }
         }
     }
+}
+
+fun formatTime(ms: Long): String {
+    val s = ms / 1000
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "$h:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}"
+    else "$m:${sec.toString().padStart(2, '0')}"
+}
+
+fun humanTime(ms: Long): String {
+    val h = ms / 3600000
+    val m = (ms % 3600000) / 60000
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
 @Composable
@@ -444,7 +504,7 @@ fun SpinningDisc(sizeDp: Int) {
 @Composable
 fun Panel(title: String, theme: ThemeColors, modifier: Modifier = Modifier, shape: RoundedCornerShape, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.border(1.dp, theme.border, shape).background(theme.surface.copy(alpha = LocalUiAlpha.current), shape).padding(12.dp)) {
-        Text(L.tr(title).uppercase(), color = theme.subtext, fontSize = 11.sp, letterSpacing = 2.sp)
+        Text(L.tr(LocalContext.current, title).uppercase(), color = theme.subtext, fontSize = 11.sp, letterSpacing = 2.sp)
         Spacer(Modifier.height(8.dp))
         content()
     }
@@ -467,26 +527,29 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         topSongs.mapNotNull { s -> songs.firstOrNull { it.path == s.first } }
     }
     val recent = remember(songs) { songs.sortedByDescending { it.dateAdded }.take(10) }
-    val albums = remember(songs) { songs.groupBy { it.album }.entries.sortedByDescending { it.value.size } }
+    val albums = remember(songs) { songs.groupBy { it.album } }
+    val banner by Prefs.profileBanner(c).collectAsState(initial = "")
+    val bio by Prefs.profileBio(c).collectAsState(initial = "")
+    val pronouns by Prefs.profilePronouns(c).collectAsState(initial = "")
+    val fav by Prefs.favSong(c).collectAsState(initial = "")
     val pickPfp = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             try { c.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) {}
             scope.launch { Prefs.setProfilePic(c, uri.toString()) }
         }
     }
-
-    val banner by Prefs.profileBanner(c).collectAsState(initial = "")
-    val bio by Prefs.profileBio(c).collectAsState(initial = "")
-    val pronouns by Prefs.profilePronouns(c).collectAsState(initial = "")
-    val fav by Prefs.favSong(c).collectAsState(initial = "")
+    val pickBanner = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            try { c.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) {}
+            scope.launch { Prefs.setProfileBanner(c, uri.toString()) }
+        }
+    }
+    val location by Prefs.profileLocation(c).collectAsState(initial = "")
+    val favAlbum by Prefs.profileFavAlbum(c).collectAsState(initial = "")
+    var locationField by remember(location) { mutableStateOf(location) }
+    var favAlbumField by remember(favAlbum) { mutableStateOf(favAlbum) }
 
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        val pickBanner = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null) {
-                try { c.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) {}
-                scope.launch { Prefs.setProfileBanner(c, uri.toString()) }
-            }
-        }
         Panel("profile", theme, shape = shape) {
             if (banner.isNotEmpty()) {
                 AsyncImage(model = banner, contentDescription = null,
@@ -506,27 +569,23 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(profileName, color = theme.text, fontSize = 15.sp, modifier = Modifier.clickable { editName = true })
-                    Text(L.tr("tap to edit"), color = theme.subtext, fontSize = 10.sp)
+                    Text(L.tr(LocalContext.current, "tap to edit"), color = theme.subtext, fontSize = 10.sp)
                 }
-                Text(L.tr("[set pfp]"), color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickPfp.launch("image/*") })
+                Text(L.tr(LocalContext.current, "[set pfp]"), color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickPfp.launch("image/*") })
             }
             if (pronouns.isNotEmpty()) Text("($pronouns)", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
-            val location by Prefs.profileLocation(c).collectAsState(initial = "")
-            val favAlbum by Prefs.profileFavAlbum(c).collectAsState(initial = "")
-            var locationField by remember(location) { mutableStateOf(location) }
-            var favAlbumField by remember(favAlbum) { mutableStateOf(favAlbum) }
             if (location.isNotEmpty()) Text("📍 $location", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
             if (favAlbum.isNotEmpty()) Text("★ fav album: $favAlbum", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
             if (bio.isNotEmpty()) Text(bio, color = theme.text, fontSize = 13.sp, modifier = Modifier.clickable { editBio = true })
             else Text("tap to add a bio…", color = theme.subtext, fontSize = 13.sp, modifier = Modifier.clickable { editBio = true })
             val curIdx = Playback.player?.currentMediaItemIndex ?: -1
-            val curSong = Playback.queue.value.getOrNull(curIdx)
             if (fav.isNotEmpty()) Text("★ favorite: $fav", color = theme.subtext, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("[banner]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickBanner.launch("image/*") })
                 Text("[pronouns]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
                 Text("[location]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
                 Text("[fav album]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
+                Text("[bio]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editBio = true })
             }
         }
 
@@ -534,9 +593,8 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             Text(welcome, color = theme.text, fontSize = 18.sp, lineHeight = 26.sp, modifier = Modifier.clickable { editWelcome = true })
         }
 
-
         Panel("most played", theme, shape = shape) {
-            if (topSongList.isEmpty()) Text(L.tr("no plays yet"), color = theme.subtext, fontSize = 13.sp)
+            if (topSongList.isEmpty()) Text(L.tr(LocalContext.current, "no plays yet"), color = theme.subtext, fontSize = 13.sp)
             Text("${songs.size} songs · ${albums.size} albums in library", color = theme.subtext, fontSize = 11.sp)
             topSongList.take(5).forEachIndexed { i, s ->
                 Row(Modifier.fillMaxWidth().clickable { Playback.play(c, topSongList, i) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -550,14 +608,6 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             }
         }
 
-        Panel("recently added", theme, shape = shape) {
-            recent.take(5).forEachIndexed { i, s ->
-                Text("${s.title} — ${s.artist}", color = theme.text, fontSize = 13.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth().clickable { Playback.play(c, recent, i) }.padding(vertical = 3.dp))
-            }
-        }
-
         val lastPath = remember { Stats.lastPlayedPath(c) }
         val lastSong = remember(songs, lastPath) { songs.firstOrNull { it.path == lastPath } }
         if (lastSong != null) Panel("last played", theme, shape = shape) {
@@ -566,37 +616,26 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
                 modifier = Modifier.fillMaxWidth().clickable { Playback.play(c, songs, songs.indexOf(lastSong)) }.padding(vertical = 3.dp))
         }
 
-        Panel("albums", theme, shape = shape) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(albums) { (name, list) ->
-                    Column(Modifier.width(110.dp).clickable { Playback.play(c, list, 0) }) {
-                        AsyncImage(model = albumArtUri(list.first()), contentDescription = null,
-                            modifier = Modifier.size(110.dp).clip(shape).background(theme.bg, shape), contentScale = ContentScale.Crop)
-                        Text(name, color = theme.text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${list.size} tracks", color = theme.subtext, fontSize = 10.sp)
-                    }
-                }
+        Panel("recently added", theme, shape = shape) {
+            recent.take(5).forEachIndexed { i, s ->
+                Text("${s.title} — ${s.artist}", color = theme.text, fontSize = 13.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().clickable { Playback.play(c, recent, i) }.padding(vertical = 3.dp))
             }
         }
-
-        Button(onClick = { if (songs.isNotEmpty()) Playback.play(c, songs.shuffled(), 0) },
-            colors = ButtonDefaults.buttonColors(containerColor = theme.accent), shape = shape) {
-            Text(L.tr("[ shuffle all ]"), color = theme.bg)
-        }
-        Spacer(Modifier.height(6.dp))
     }
 
     if (editWelcome) AlertDialog(
         onDismissRequest = { editWelcome = false },
-        title = { Text(L.tr("edit welcome")) },
+        title = { Text(L.tr(LocalContext.current, "edit welcome")) },
         text = { OutlinedTextField(value = welcomeField, onValueChange = { welcomeField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setWelcome(c, welcomeField); editWelcome = false } }) { Text(L.tr("ok")) } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setWelcome(c, welcomeField); editWelcome = false } }) { Text(L.tr(LocalContext.current, "ok")) } }
     )
     if (editName) AlertDialog(
         onDismissRequest = { editName = false },
-        title = { Text(L.tr("edit name")) },
+        title = { Text(L.tr(LocalContext.current, "edit name")) },
         text = { OutlinedTextField(value = nameField, onValueChange = { nameField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileName(c, nameField); editName = false } }) { Text(L.tr("ok")) } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileName(c, nameField); editName = false } }) { Text(L.tr(LocalContext.current, "ok")) } }
     )
     var bioField by remember(bio) { mutableStateOf(bio) }
     var pronounsField by remember(pronouns) { mutableStateOf(pronouns) }
@@ -604,29 +643,25 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
         onDismissRequest = { editBio = false },
         title = { Text("edit bio") },
         text = { OutlinedTextField(value = bioField, onValueChange = { bioField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileBio(c, bioField); editBio = false } }) { Text(L.tr("ok")) } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileBio(c, bioField); editBio = false } }) { Text(L.tr(LocalContext.current, "ok")) } }
     )
     if (editPronouns) AlertDialog(
         onDismissRequest = { editPronouns = false },
         title = { Text("edit pronouns") },
         text = { OutlinedTextField(value = pronounsField, onValueChange = { pronounsField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfilePronouns(c, pronounsField); editPronouns = false } }) { Text(L.tr("ok")) } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfilePronouns(c, pronounsField); editPronouns = false } }) { Text(L.tr(LocalContext.current, "ok")) } }
     )
-    val location by Prefs.profileLocation(c).collectAsState(initial = "")
-    val favAlbum by Prefs.profileFavAlbum(c).collectAsState(initial = "")
-    var locationField by remember(location) { mutableStateOf(location) }
-    var favAlbumField by remember(favAlbum) { mutableStateOf(favAlbum) }
     if (editLocation) AlertDialog(
         onDismissRequest = { editLocation = false },
         title = { Text("edit location") },
         text = { OutlinedTextField(value = locationField, onValueChange = { locationField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileLocation(c, locationField); editLocation = false } }) { Text(L.tr("ok")) } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileLocation(c, locationField); editLocation = false } }) { Text(L.tr(LocalContext.current, "ok")) } }
     )
     if (editFavAlbum) AlertDialog(
         onDismissRequest = { editFavAlbum = false },
         title = { Text("edit favorite album") },
         text = { OutlinedTextField(value = favAlbumField, onValueChange = { favAlbumField = it }) },
-        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileFavAlbum(c, favAlbumField); editFavAlbum = false } }) { Text(L.tr("ok")) } }
+        confirmButton = { TextButton(onClick = { scope.launch { Prefs.setProfileFavAlbum(c, favAlbumField); editFavAlbum = false } }) { Text(L.tr(LocalContext.current, "ok")) } }
     )
 }
 
@@ -643,18 +678,18 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
             it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true) || it.album.contains(query, ignoreCase = true)
         }
     }
-    Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(L.tr("search")) },
-            modifier = Modifier.fillMaxWidth())
-        val playsMap = remember(c) { Stats.topSongs(c, Int.MAX_VALUE).toMap() }
-        var sortMode by remember { mutableStateOf(0) }
-        val shownSorted = remember(shown, sortMode, playsMap) {
-            when (sortMode) {
-                1 -> shown.sortedBy { it.year.toIntOrNull() ?: Int.MAX_VALUE }
-                2 -> shown.sortedByDescending { playsMap[it.path] ?: 0 }
-                else -> shown
-            }
+    val playsMap = remember(c) { Stats.topSongs(c, Int.MAX_VALUE).toMap() }
+    var sortMode by remember { mutableStateOf(0) }
+    val shownSorted = remember(shown, sortMode, playsMap) {
+        when (sortMode) {
+            1 -> shown.sortedBy { it.year.toIntOrNull() ?: Int.MAX_VALUE }
+            2 -> shown.sortedByDescending { playsMap[it.path] ?: 0 }
+            else -> shown
         }
+    }
+    Column(Modifier.fillMaxSize()) {
+        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(L.tr(LocalContext.current, "search")) },
+            modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Text("sort: ${listOf("title", "year", "plays")[sortMode]}", color = theme.accent, fontSize = 12.sp,
                 modifier = Modifier.clickable { sortMode = (sortMode + 1) % 3 }.border(1.dp, theme.border).padding(6.dp))
@@ -662,23 +697,24 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(shownSorted) { s ->
                 val idx = songs.indexOf(s)
-            Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(coverSize.dp).clip(shape))
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(coverSize.dp).clip(shape))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                    }
+                    Text(formatTime(s.durationMs), color = theme.subtext, fontSize = 11.sp)
+                    Text(L.tr(LocalContext.current, " +"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { addSong = s }.padding(start = 8.dp))
+                    Text(L.tr(LocalContext.current, " ✎"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { editSong = s }.padding(start = 8.dp))
                 }
-                Text(formatTime(s.durationMs), color = theme.subtext, fontSize = 11.sp)
-                Text(L.tr(" +"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { addSong = s }.padding(start = 8.dp))
-                Text(L.tr(" ✎"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { editSong = s }.padding(start = 8.dp))
             }
         }
     }
     addSong?.let { song ->
         AlertDialog(
             onDismissRequest = { addSong = null },
-            title = { Text(L.tr("add to playlist")) },
+            title = { Text(L.tr(LocalContext.current, "add to playlist")) },
             text = {
                 Column {
                     Playlists.names(c).forEach { name ->
@@ -687,19 +723,17 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
                         }.padding(vertical = 6.dp), color = theme.text)
                     }
                     var newPlaylistName by remember { mutableStateOf("") }
-                    OutlinedTextField(value = newPlaylistName, onValueChange = { newPlaylistName = it }, label = { Text(L.tr("new playlist")) })
+                    OutlinedTextField(value = newPlaylistName, onValueChange = { newPlaylistName = it }, label = { Text(L.tr(LocalContext.current, "new playlist")) })
                     Button(onClick = {
                         if (newPlaylistName.isNotBlank()) {
                             Playlists.create(c, newPlaylistName); Playlists.add(c, newPlaylistName, song.path); addSong = null
                         }
-                    }) { Text(L.tr("create and add")) }
+                    }) { Text(L.tr(LocalContext.current, "create and add")) }
                 }
             },
             confirmButton = {}
         )
     }
-    }
-
     editSong?.let { song ->
         var tTitle by remember(song) { mutableStateOf(song.title) }
         var tArtist by remember(song) { mutableStateOf(song.artist) }
@@ -750,25 +784,10 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
                     Meta.set(c, song.path, tTitle, tArtist, tAlbum, tYear, tTrack, tCover)
                     MusicIndex.requestRescan()
                     editSong = null
-                }) { Text(L.tr("ok")) }
+                }) { Text(L.tr(LocalContext.current, "ok")) }
             }
         )
     }
-}
-
-fun formatTime(ms: Long): String {
-    val s = ms / 1000
-    val h = s / 3600
-    val m = (s % 3600) / 60
-    val sec = s % 60
-    return if (h > 0) "$h:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}"
-           else "$m:${sec.toString().padStart(2, '0')}"
-}
-
-fun humanTime(ms: Long): String {
-    val h = ms / 3600000
-    val m = (ms % 3600000) / 60000
-    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
 @Composable
@@ -792,8 +811,8 @@ fun AlbumsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) 
                         AsyncImage(model = albumArtUri(list.first()), contentDescription = null, modifier = Modifier.size(coverSize.dp + 16.dp).clip(shape))
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(name, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val year = list.mapNotNull { it.year.toIntOrNull() }.minOrNull()
+                            Text(name, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("${list.first().artist} · ${year ?: "?"} · ${list.size} tracks · ${humanTime(list.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
                         }
                     }
@@ -808,9 +827,9 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     val artists = remember(songs) { songs.groupBy { it.artist } }
-    val detailScroll = rememberScrollState()
     val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
     val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
+    val detailScroll = rememberScrollState()
     var selectedArtist by remember { mutableStateOf<String?>(null) }
     var selectedAlbum by remember { mutableStateOf<String?>(null) }
     if (selectedAlbum != null) BackHandler { selectedAlbum = null }
@@ -834,11 +853,11 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                 }
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { selectedArtist = null }.padding(bottom = 8.dp))
+                Text(L.tr(LocalContext.current, "← back"), color = theme.accent, modifier = Modifier.clickable { selectedArtist = null }.padding(bottom = 8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val imgModel: Any = if (customImg.isEmpty()) albumArtUri(list.first()) else customImg
                     AsyncImage(model = imgModel,
-                        contentDescription = null, Modifier.size(72.dp).clip(shape).border(1.dp, theme.border, shape))
+                        contentDescription = null, modifier = Modifier.size(72.dp).clip(shape).border(1.dp, theme.border, shape))
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(selectedArtist!!, color = theme.text, fontSize = 18.sp)
@@ -852,8 +871,9 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
                         AsyncImage(model = albumArtUri(albumSongs.first()), contentDescription = null, modifier = Modifier.size(coverSize.dp + 8.dp).clip(shape))
                         Spacer(Modifier.width(12.dp))
                         Column {
+                            val year = albumSongs.mapNotNull { it.year.toIntOrNull() }.minOrNull()
                             Text(album, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${albumSongs.mapNotNull { it.year.toIntOrNull() }.minOrNull() ?: "?"} · ${albumSongs.size} tracks · ${humanTime(albumSongs.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
+                            Text("${year ?: "?"} · ${albumSongs.size} tracks · ${humanTime(albumSongs.sumOf { it.durationMs })}", color = theme.subtext, fontSize = 12.sp)
                         }
                     }
                 }
@@ -884,9 +904,8 @@ fun ArtistsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape)
 fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: Any?, songs: List<Song>, onBack: () -> Unit, shape: RoundedCornerShape = RoundedCornerShape(0.dp), scrollState: androidx.compose.foundation.ScrollState = rememberScrollState()) {
     val c = LocalContext.current
     var sortMode by remember { mutableStateOf(0) } // 0 = album order (track), 1 = title A-Z, 2 = year
-    val c2 = LocalContext.current
-    val rowPad by Prefs.rowPad(c2).collectAsState(initial = 8)
-    val coverSize by Prefs.coverSize(c2).collectAsState(initial = 40)
+    val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
+    val coverSize by Prefs.coverSize(c).collectAsState(initial = 40)
     val sorted = remember(songs, sortMode) {
         when (sortMode) {
             1 -> songs.sortedBy { it.title.lowercase() }
@@ -895,7 +914,7 @@ fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: 
         }
     }
     Column(Modifier.verticalScroll(scrollState)) {
-        Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
+        Text(L.tr(LocalContext.current, "← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (coverModel != null) {
                 AsyncImage(model = coverModel, contentDescription = null, modifier = Modifier.size(72.dp).clip(shape))
@@ -951,19 +970,17 @@ fun StatsTab(theme: ThemeColors) {
         "artists" -> FullListView("top artists", topArtists, theme) { fullView = null }
         else -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Panel("total plays: $total", theme, shape = RoundedCornerShape(0.dp)) {
-                top.let {
-                    if (it.isNotEmpty()) Text("top: ${it.first().first.substringAfterLast('/')}", color = theme.text, fontSize = 13.sp)
-                    else Text(L.tr("nothing yet — play something!"), color = theme.subtext, fontSize = 12.sp)
-                }
+                if (top.isNotEmpty()) Text("top: ${top.first().first.substringAfterLast('/')}", color = theme.text, fontSize = 13.sp)
+                else Text("nothing yet — play something!", color = theme.subtext, fontSize = 12.sp)
             }
             StatCard("most played songs", top.take(5).map { it.first.substringAfterLast('/') to it.second }, theme) { fullView = "songs" }
             StatCard("top albums", albums.take(5), theme) { fullView = "albums" }
             StatCard("top artists", topArtists.take(5), theme) { fullView = "artists" }
-            Text(L.tr("[import stats json]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
+            Text(L.tr(LocalContext.current, "[import stats json]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
             if (showImport) {
-                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr("paste json")) },
+                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr(LocalContext.current, "paste json")) },
                     modifier = Modifier.fillMaxWidth().height(160.dp))
-                Button(onClick = { Stats.importJson(c, importText); showImport = false }) { Text(L.tr("import")) }
+                Button(onClick = { Stats.importJson(c, importText); showImport = false }) { Text(L.tr(LocalContext.current, "import")) }
             }
         }
     }
@@ -971,25 +988,25 @@ fun StatsTab(theme: ThemeColors) {
 
 @Composable
 fun StatCard(title: String, items: List<Pair<String, Int>>, theme: ThemeColors, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().border(1.dp, theme.border).background(theme.surface.copy(alpha = LocalUiAlpha.current)).clickable { onClick() }.padding(12.dp)) {
-        Text(L.tr(title).uppercase(), color = theme.accent, fontSize = 13.sp)
+    Column(Modifier.fillMaxWidth().border(1.dp, theme.border).background(theme.surface).clickable { onClick() }.padding(12.dp)) {
+        Text(L.tr(LocalContext.current, title).uppercase(), color = theme.accent, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
-        if (items.isEmpty()) Text(L.tr("no data"), color = theme.subtext, fontSize = 12.sp)
+        if (items.isEmpty()) Text("no data", color = theme.subtext, fontSize = 12.sp)
         items.forEachIndexed { i, (name, count) ->
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                 Text("${i + 1}. $name", color = theme.text, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("$count", color = theme.subtext, fontSize = 12.sp)
             }
         }
-        Text(L.tr("tap for full list →"), color = theme.subtext, fontSize = 10.sp)
+        Text("tap for full list →", color = theme.subtext, fontSize = 10.sp)
     }
 }
 
 @Composable
 fun FullListView(title: String, items: List<Pair<String, Int>>, theme: ThemeColors, onBack: () -> Unit) {
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
-        Text(L.tr(title).uppercase(), color = theme.text, fontSize = 16.sp)
+        Text(L.tr(LocalContext.current, "← back"), color = theme.accent, modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
+        Text(L.tr(LocalContext.current, title).uppercase(), color = theme.text, fontSize = 16.sp)
         Spacer(Modifier.height(8.dp))
         items.forEachIndexed { i, (name, count) ->
             Row(Modifier.fillMaxWidth().border(1.dp, theme.border).padding(10.dp)) {
@@ -1001,7 +1018,6 @@ fun FullListView(title: String, items: List<Pair<String, Int>>, theme: ThemeColo
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsTab(
     theme: ThemeColors, themeName: String, rounded: Boolean, folders: Set<String>,
@@ -1049,7 +1065,7 @@ fun SettingsTab(
                         scope.launch {
                             Prefs.setCustom(c, customBg, customSurface, customText, customSubtext, customAccent, customBorder)
                         }
-                    }) { Text(L.tr("apply")) }
+                    }) { Text(L.tr(LocalContext.current, "apply")) }
                 }
                 listOf("bg" to customBg, "surface" to customSurface, "text" to customText, "subtext" to customSubtext, "accent" to customAccent, "border" to customBorder).forEachIndexed { i, pair ->
                     val label = pair.first
@@ -1092,7 +1108,7 @@ fun SettingsTab(
                                 else -> customBorder = v
                             }
                             scope.launch { Prefs.setCustom(c, bg, surface, text, subtext, accent, border) }
-                        }, label = { Text(L.tr("$label #hex")) }, modifier = Modifier.fillMaxWidth())
+                        }, label = { Text(L.tr(LocalContext.current, "$label #hex")) }, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 var newThemeName by remember { mutableStateOf("") }
@@ -1145,7 +1161,7 @@ fun SettingsTab(
                         }
                     }
                 }
-                Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customSurface, customText, customSubtext, customAccent, customBorder) } }) { Text(L.tr("apply")) }
+                Button(onClick = { scope.launch { Prefs.setCustom(c, customBg, customSurface, customText, customSubtext, customAccent, customBorder) } }) { Text(L.tr(LocalContext.current, "apply")) }
             }
         }
 
@@ -1162,7 +1178,7 @@ fun SettingsTab(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = fontUrl, onValueChange = { fontUrl = it }, label = { Text(L.tr(".ttf url")) }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = fontUrl, onValueChange = { fontUrl = it }, label = { Text(L.tr(LocalContext.current, ".ttf url")) }, modifier = Modifier.weight(1f))
                 Button(onClick = {
                     scope.launch {
                         try {
@@ -1181,7 +1197,7 @@ fun SettingsTab(
                             }
                         } catch (e: Exception) { fontMsg = "download failed" }
                     }
-                }) { Text(L.tr("dl")) }
+                }) { Text(L.tr(LocalContext.current, "dl")) }
             }
             if (fontMsg.isNotEmpty()) Text(fontMsg, color = theme.subtext, fontSize = 11.sp)
         }
@@ -1249,8 +1265,8 @@ fun SettingsTab(
 
         Panel("about", theme, shape = RoundedCornerShape(0.dp)) {
             Text("physic v${LocalContext.current.packageManager.getPackageInfo(LocalContext.current.packageName, 0).versionName}", color = theme.text, fontSize = 13.sp)
-            Text(L.tr("github.com/Tolepi/physic"), color = theme.accent, fontSize = 12.sp)
-            Text(L.tr("vibecoded with love"), color = theme.subtext, fontSize = 11.sp)
+            Text(L.tr(LocalContext.current, "github.com/Tolepi/physic"), color = theme.accent, fontSize = 12.sp)
+            Text(L.tr(LocalContext.current, "vibecoded with love"), color = theme.subtext, fontSize = 11.sp)
         }
 
         val rowPad by Prefs.rowPad(c).collectAsState(initial = 8)
@@ -1258,6 +1274,7 @@ fun SettingsTab(
         val npSize by Prefs.npSize(c).collectAsState(initial = 52)
         val eqVertical by Prefs.eqVertical(c).collectAsState(initial = false)
         val bgAlphaPct by Prefs.bgAlpha(c).collectAsState(initial = 45)
+        val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
         val fontScale by Prefs.fontScale(c).collectAsState(initial = 1f)
         val lineHeightScale by Prefs.lineHeightScale(c).collectAsState(initial = 0f)
         val backupMsg by remember { mutableStateOf("") }
@@ -1297,16 +1314,9 @@ fun SettingsTab(
             Text("background image opacity: $bgAlphaPct%", color = theme.text, fontSize = 13.sp)
             Slider(value = bgAlphaPct.toFloat(), onValueChange = { v -> scope.launch { Prefs.setBgAlpha(c, v.toInt().coerceIn(0, 100)) } }, valueRange = 0f..100f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
-            val uiAlpha by Prefs.uiAlpha(c).collectAsState(initial = 100)
             Text("ui panel opacity (with bg): $uiAlpha%", color = theme.text, fontSize = 13.sp)
             Slider(value = uiAlpha.toFloat(), onValueChange = { v -> scope.launch { Prefs.setUiAlpha(c, v.toInt().coerceIn(15, 100)) } }, valueRange = 15f..100f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
-        }
-        Panel("customization", theme, shape = RoundedCornerShape(0.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("vertical equalizer sliders", color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(checked = eqVertical, onCheckedChange = { scope.launch { Prefs.setEqVertical(c, it) } })
-            }
             Text("font size: ${(fontScale * 100).toInt()}%", color = theme.text, fontSize = 13.sp)
             Slider(value = fontScale, onValueChange = { v -> scope.launch { Prefs.setFontScale(c, (v * 20).toInt() / 20f) } }, valueRange = 0.7f..2.0f,
                 colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent))
@@ -1353,6 +1363,32 @@ fun SettingsTab(
                 if (customBgImg.isNotEmpty()) TextButton(onClick = { scope.launch { Prefs.setCustomBgImg(c, "") } }) { Text("[ clear ]") }
             }
         }
+
+        val lang by Prefs.language(c).collectAsState(initial = "")
+        Panel("language", theme, shape = RoundedCornerShape(0.dp)) {
+            val languages = listOf(
+                "" to "System Default",
+                "en" to "English",
+                "es" to "Español",
+                "fr" to "Français",
+                "de" to "Deutsch",
+                "ja" to "日本語",
+                "zh" to "中文",
+                "it" to "Italiano",
+                "pt" to "Português",
+                "ru" to "Русский",
+                "ko" to "한국어",
+                "ar" to "العربية"
+            )
+            Column {
+                languages.forEach { (code, name) ->
+                    Row(Modifier.fillMaxWidth().clickable { scope.launch { Prefs.setLanguage(c, code) } }.padding(vertical = 8.dp)) {
+                        Text(name, color = if (lang == code) theme.accent else theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        if (lang == code) Text("✓", color = theme.accent, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1376,23 +1412,23 @@ fun PlaylistsTab(theme: ThemeColors) {
     when (val open = openPlaylist) {
         null -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Panel("your playlists", theme, shape = RoundedCornerShape(0.dp)) {
-                if (names.isEmpty()) Text(L.tr("no playlists yet — make one!"), color = theme.subtext, fontSize = 13.sp)
+                if (names.isEmpty()) Text(L.tr(LocalContext.current, "no playlists yet — make one!"), color = theme.subtext, fontSize = 13.sp)
                 names.forEach { name ->
                     Row(Modifier.fillMaxWidth().clickable { openPlaylist = name }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(name, color = theme.text, modifier = Modifier.weight(1f))
-                        Text(L.tr("[delete]"), color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { Playlists.delete(c, name); refresh() })
+                        Text(L.tr(LocalContext.current, "[delete]"), color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { Playlists.delete(c, name); refresh() })
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Button(onClick = { showNew = !showNew }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr("[ new playlist ]"), color = theme.bg) }
+                Button(onClick = { showNew = !showNew }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr(LocalContext.current, "[ new playlist ]"), color = theme.bg) }
                 if (showNew) {
-                    OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text(L.tr("name")) })
-                    Button(onClick = { if (newName.isNotBlank()) { Playlists.create(c, newName); refresh(); newName = ""; showNew = false } }) { Text(L.tr("create")) }
+                    OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text(L.tr(LocalContext.current, "name")) })
+                    Button(onClick = { if (newName.isNotBlank()) { Playlists.create(c, newName); refresh(); newName = ""; showNew = false } }) { Text(L.tr(LocalContext.current, "create")) }
                 }
             }
             Row {
-                Text(L.tr("[export]"), color = theme.accent, modifier = Modifier.clickable { exportText = Playlists.exportJson(c) }.padding(end = 16.dp))
-                Text(L.tr("[import]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
+                Text(L.tr(LocalContext.current, "[export]"), color = theme.accent, modifier = Modifier.clickable { exportText = Playlists.exportJson(c) }.padding(end = 16.dp))
+                Text(L.tr(LocalContext.current, "[import]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
             }
             exportText?.let { text ->
                 Panel("export (copy this into a file to share)", theme, shape = RoundedCornerShape(0.dp)) {
@@ -1400,8 +1436,8 @@ fun PlaylistsTab(theme: ThemeColors) {
                 }
             }
             if (showImport) {
-                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr("paste playlist json")) }, modifier = Modifier.fillMaxWidth().height(160.dp))
-                Button(onClick = { Playlists.importJson(c, importText); refresh(); showImport = false }) { Text(L.tr("import")) }
+                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr(LocalContext.current, "paste playlist json")) }, modifier = Modifier.fillMaxWidth().height(160.dp))
+                Button(onClick = { Playlists.importJson(c, importText); refresh(); showImport = false }) { Text(L.tr(LocalContext.current, "import")) }
             }
         }
         else -> {
@@ -1414,10 +1450,10 @@ fun PlaylistsTab(theme: ThemeColors) {
                 paths.mapNotNull { p -> fullIndex[p] }
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(L.tr("← back"), color = theme.accent, modifier = Modifier.clickable { openPlaylist = null; refresh() }.padding(bottom = 8.dp))
+                Text(L.tr(LocalContext.current, "← back"), color = theme.accent, modifier = Modifier.clickable { openPlaylist = null; refresh() }.padding(bottom = 8.dp))
                 Text(open, color = theme.text, fontSize = 18.sp)
                 Spacer(Modifier.height(6.dp))
-                if (songs.isEmpty()) Text(L.tr("empty — add songs from the songs tab (+ icon)"), color = theme.subtext, fontSize = 12.sp)
+                if (songs.isEmpty()) Text(L.tr(LocalContext.current, "empty — add songs from the songs tab (+ icon)"), color = theme.subtext, fontSize = 12.sp)
                 songs.forEachIndexed { i, s ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp))
@@ -1492,13 +1528,14 @@ fun OnboardingScreen(theme: ThemeColors) {
     var rounded by remember { mutableStateOf(false) }
     var fontName by remember { mutableStateOf("DM Mono") }
     LaunchedEffect(Unit) { allFolders = MusicIndex.foldersOfLibrary(c) }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(L.tr("welcome to Physic"), color = theme.text, fontSize = 24.sp)
-        Text(L.tr("you can change all of this later in ~/settings"), color = theme.subtext, fontSize = 12.sp)
+        Text("welcome to Physic", color = theme.text, fontSize = 24.sp)
+        Text("you can change all of this later in ~/settings", color = theme.subtext, fontSize = 12.sp)
 
         Panel("profile", theme, shape = RoundedCornerShape(0.dp)) {
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(L.tr("your name")) })
-            OutlinedTextField(value = welcome, onValueChange = { welcome = it }, label = { Text(L.tr("welcome message")) })
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("your name") })
+            OutlinedTextField(value = welcome, onValueChange = { welcome = it }, label = { Text("welcome message") })
         }
         Panel("theme", theme, shape = RoundedCornerShape(0.dp)) {
             LazyRow {
@@ -1510,12 +1547,12 @@ fun OnboardingScreen(theme: ThemeColors) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.tr("rounded corners"), color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text("rounded corners", color = theme.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Switch(checked = rounded, onCheckedChange = { rounded = it })
             }
         }
         Panel("font", theme, shape = RoundedCornerShape(0.dp)) {
-            listOf("DM Mono", "JetBrainsMono", "FiraCode", "CascadiaCode", "SpaceMono", "Iosevka", "MapleMono", "MapleMono Italic").forEach {
+            listOf("DM Mono", "JetBrainsMono", "FiraCode", "CascadiaCode", "SpaceMono").forEach {
                 Text(it, color = if (fontName == it) theme.accent else theme.subtext,
                     modifier = Modifier.clickable { fontName = it }.padding(vertical = 3.dp))
             }
@@ -1540,6 +1577,6 @@ fun OnboardingScreen(theme: ThemeColors) {
                 Prefs.setFolders(c, foldersOn)
                 Prefs.setOnboarded(c, true)
             }
-        }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr("[ finish ]"), color = theme.bg) }
+        }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text("[ finish ]", color = theme.bg) }
     }
 }
