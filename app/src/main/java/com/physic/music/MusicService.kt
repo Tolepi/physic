@@ -1,20 +1,17 @@
 package com.physic.music
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import android.provider.MediaStore
-import androidx.core.app.NotificationCompat
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.glance.appwidget.updateAll
@@ -22,9 +19,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MusicService : MediaSessionService() {
     private var session: MediaSession? = null
@@ -42,8 +39,37 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Playback", NotificationManager.IMPORTANCE_LOW))
-        player = ExoPlayer.Builder(this).build().also { Playback.player = it }
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, getString(R.string.playback_channel), NotificationManager.IMPORTANCE_LOW))
+        player = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+            .also { Playback.player = it }
+        val notificationProvider = object : DefaultMediaNotificationProvider(
+            this,
+            DefaultMediaNotificationProvider.NotificationIdProvider { NOTY_ID },
+            CHANNEL_ID,
+            R.string.playback_channel
+        ) {
+            override fun getNotificationContentText(metadata: MediaMetadata): CharSequence? {
+                val artist = metadata.artist?.toString().orEmpty()
+                val album = metadata.albumTitle?.toString().orEmpty()
+                return when {
+                    artist.isNotEmpty() && album.isNotEmpty() -> "$artist · $album"
+                    artist.isNotEmpty() -> artist
+                    album.isNotEmpty() -> album
+                    else -> null
+                }
+            }
+        }
+        notificationProvider.setSmallIcon(android.R.drawable.ic_media_play)
+        setMediaNotificationProvider(notificationProvider)
         scope.launch { Prefs.pauseUnplug(applicationContext).collect { player?.setHandleAudioBecomingNoisy(it) } }
         scope.launch { Prefs.skipSilence(applicationContext).collect { player?.setSkipSilenceEnabled(it) } }
         scope.launch { Prefs.crossfadeMs(applicationContext).collect { currentCrossfadeMs = it } }
@@ -51,6 +77,11 @@ class MusicService : MediaSessionService() {
             .setSessionActivity(
                 PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             ).build()
+        // Register the session with the service ourselves. onGetSession() only adds it when a
+        // controller connects, and this app drives the player directly without one. Without this,
+        // media3 never posts the media notification or promotes the service to foreground, so
+        // playback gets killed in the background and launchers see no media controls.
+        addSession(session!!)
         player!!.addListener(object : Player.Listener {
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 item?.mediaMetadata?.let { m ->
@@ -59,7 +90,7 @@ class MusicService : MediaSessionService() {
                 }
                 countedSong = null
                 updateWidget()
-                updateNotification()
+                ensureArtwork()
                 val fade = currentCrossfadeMs
                 if (fade > 0) {
                     player?.volume = 0f
@@ -75,7 +106,6 @@ class MusicService : MediaSessionService() {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 Playback.playing.value = isPlaying
                 updateWidget()
-                updateNotification()
             }
         })
 
@@ -85,7 +115,6 @@ class MusicService : MediaSessionService() {
             launch { Prefs.playCountPct(applicationContext).collect { currentPct = it } }
             while (true) {
                 kotlinx.coroutines.delay(1000)
-                updateNotification()
                 try {
                     val p = player
                     if (p != null && p.playWhenReady && p.currentPosition > 0 && p.duration > 0) {
@@ -102,44 +131,6 @@ class MusicService : MediaSessionService() {
                     }
                 } catch (e: Exception) { /* ignore */ }
             }
-        }
-    }
-
-    private fun buildNotification(): Notification {
-        val meta = player?.currentMediaItem?.mediaMetadata
-        val playing = player?.isPlaying == true
-        val toggle = PendingIntent.getService(this, 1, Intent(this, MusicService::class.java).setAction("TOGGLE"), PendingIntent.FLAG_IMMUTABLE)
-        val prev = PendingIntent.getService(this, 2, Intent(this, MusicService::class.java).setAction("PREV"), PendingIntent.FLAG_IMMUTABLE)
-        val next = PendingIntent.getService(this, 3, Intent(this, MusicService::class.java).setAction("NEXT"), PendingIntent.FLAG_IMMUTABLE)
-        val stop = PendingIntent.getService(this, 4, Intent(this, MusicService::class.java).setAction("STOP"), PendingIntent.FLAG_IMMUTABLE)
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(meta?.title?.toString() ?: "Physic")
-            .setContentText(meta?.artist?.toString() ?: "")
-            .setSubText(meta?.albumTitle?.toString())
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setOngoing(playing)
-            .setProgress(
-                (player?.duration?.coerceAtLeast(1) ?: 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                (player?.currentPosition?.coerceAtLeast(0) ?: 0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                false
-            )
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(android.R.drawable.ic_media_previous, "Prev", prev)
-            .addAction(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, "Play/Pause", toggle)
-            .addAction(android.R.drawable.ic_media_next, "Next", next)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stop)
-            .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
-            .build()
-    }
-
-    private fun updateNotification() {
-        val n = buildNotification()
-        try {
-            startForeground(NOTY_ID, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } catch (e: Exception) {
-            try {
-                (getSystemService(NotificationManager::class.java)).notify(NOTY_ID, n)
-            } catch (_: Exception) {}
         }
     }
 
@@ -165,6 +156,39 @@ class MusicService : MediaSessionService() {
         super.onDestroy()
     }
 
+    /**
+     * Media3 cannot always resolve the MediaStore album-art URI itself, which leaves the
+     * notification/lock screen without a large icon. Load the cover and embed it in the current
+     * media item so every media controller (notification, lock screen, launchers) gets it.
+     */
+    private fun ensureArtwork() {
+        val p = player ?: return
+        val index = p.currentMediaItemIndex
+        if (index < 0) return
+        val item = p.currentMediaItem ?: return
+        if (item.mediaMetadata.artworkData != null) return
+        val song = Playback.queue.value.getOrNull(index) ?: return
+        scope.launch(Dispatchers.IO) {
+            val art = Artwork.bytes(applicationContext, song) ?: return@launch
+            withContext(Dispatchers.Main) {
+                val current = player ?: return@withContext
+                if (current.currentMediaItemIndex != index) return@withContext
+                val cur = current.currentMediaItem ?: return@withContext
+                if (cur.mediaMetadata.artworkData != null) return@withContext
+                try {
+                    current.replaceMediaItem(
+                        index,
+                        cur.buildUpon().setMediaMetadata(
+                            cur.mediaMetadata.buildUpon()
+                                .setArtworkData(art, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                                .build()
+                        ).build()
+                    )
+                } catch (e: Exception) { /* player can be released mid-load */ }
+            }
+        }
+    }
+
     private fun updateWidget() {
         scope.launch { MusicWidget().updateAll(applicationContext) }
     }
@@ -187,11 +211,21 @@ object Playback {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ play(context, songs, startIndex) }, 300)
             return
         }
-        p.setMediaItems(songs.map { MediaItem.fromUri(it.uri).buildUpon().setMediaMetadata(
-            androidx.media3.common.MediaMetadata.Builder().setTitle(it.title).setArtist(it.artist).setAlbumTitle(it.album)
-                .setArtworkUri(ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, it.albumId))
-                .build()
-        ).build() }, startIndex, 0)
+        p.setMediaItems(songs.mapIndexed { i, s ->
+            val meta = MediaMetadata.Builder()
+                .setTitle(s.title)
+                .setArtist(s.artist)
+                .setAlbumTitle(s.album)
+                .setTrackNumber(s.track.takeIf { it > 0 })
+                .setReleaseYear(s.year.toIntOrNull())
+                .setArtworkUri(albumArtUri(s))
+            if (i == startIndex) {
+                Artwork.bytes(context, s)?.let {
+                    meta.setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                }
+            }
+            MediaItem.fromUri(s.uri).buildUpon().setMediaMetadata(meta.build()).build()
+        }, startIndex, 0)
         p.prepare()
         p.play()
         p.shuffleModeEnabled = kotlinx.coroutines.runBlocking { Prefs.shuffle(context).first() }

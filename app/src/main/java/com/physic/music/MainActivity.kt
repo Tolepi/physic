@@ -1,7 +1,6 @@
 package com.physic.music
 
 import android.Manifest
-import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -188,9 +187,7 @@ class MainActivity : ComponentActivity() {
 }
 
 fun albumArtUri(song: Song): Uri = if (!song.coverOverride.isNullOrEmpty()) Uri.parse(song.coverOverride)
-else ContentUris.withAppendedId(
-    MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, song.albumId
-)
+else Uri.parse("content://media/external/audio/albumart/${song.albumId}")
 
 /** Opacity applied to panels/dialogs so a background image shows through. 1f = fully opaque. */
 val LocalUiAlpha = androidx.compose.runtime.staticCompositionLocalOf { 1f }
@@ -617,11 +614,13 @@ fun HomeTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape, we
             val curIdx = Playback.player?.currentMediaItemIndex ?: -1
             if (fav.isNotEmpty()) Text("★ favorite: $fav", color = theme.subtext, fontSize = 12.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("[banner]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { pickBanner.launch("image/*") })
-                Text("[pronouns]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editPronouns = true })
-                Text("[location]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editLocation = true })
-                Text("[fav album]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editFavAlbum = true })
-                Text("[bio]", color = theme.accent, fontSize = 12.sp, modifier = Modifier.clickable { editBio = true })
+                Text(L.tr(LocalContext.current, "[banner]"), color = theme.accent, fontSize = 12.sp, maxLines = 1, softWrap = false, modifier = Modifier.clickable { pickBanner.launch("image/*") })
+                Text(L.tr(LocalContext.current, "[pronouns]"), color = theme.accent, fontSize = 12.sp, maxLines = 1, softWrap = false, modifier = Modifier.clickable { editPronouns = true })
+                Text(L.tr(LocalContext.current, "[location]"), color = theme.accent, fontSize = 12.sp, maxLines = 1, softWrap = false, modifier = Modifier.clickable { editLocation = true })
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(L.tr(LocalContext.current, "[fav album]"), color = theme.accent, fontSize = 12.sp, maxLines = 1, softWrap = false, modifier = Modifier.clickable { editFavAlbum = true })
+                Text(L.tr(LocalContext.current, "[bio]"), color = theme.accent, fontSize = 12.sp, maxLines = 1, softWrap = false, modifier = Modifier.clickable { editBio = true })
             }
         }
 

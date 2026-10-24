@@ -56,12 +56,8 @@ class MusicWidget : GlanceAppWidget() {
         val artist = Playback.artist.value
         val playing = Playback.playing.value
         val albumArtBitmap = Playback.queue.value.getOrNull(Playback.player?.currentMediaItemIndex ?: 0)?.let { song ->
-            val albumArtUri = android.content.ContentUris.withAppendedId(
-                android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
-                song.albumId
-            )
             try {
-                val stream = context.contentResolver.openInputStream(albumArtUri)
+                val stream = context.contentResolver.openInputStream(albumArtUri(song))
                 val bmp = android.graphics.BitmapFactory.decodeStream(stream)
                 stream?.close()
                 bmp
