@@ -134,6 +134,16 @@ object Prefs {
         if (stats.exists()) obj.put("stats", stats.readText())
         val pls = File(c.filesDir, "playlists.json")
         if (pls.exists()) obj.put("playlists", pls.readText())
+        val plCovers = File(c.filesDir, "playlist_covers.json")
+        if (plCovers.exists()) obj.put("playlist_covers", plCovers.readText())
+        val coverDir = File(c.filesDir, "playlist_covers")
+        if (coverDir.exists() && coverDir.listFiles()?.isNotEmpty() == true) {
+            val co = org.json.JSONObject()
+            coverDir.listFiles()?.forEach { f ->
+                co.put(f.name, android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP))
+            }
+            obj.put("playlist_cover_files", co)
+        }
         val meta = File(c.filesDir, "meta_overrides.json")
         if (meta.exists()) obj.put("meta", meta.readText())
         val fonts = File(c.filesDir, "fonts")
@@ -164,6 +174,15 @@ object Prefs {
         }
         obj.optString("stats", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "stats.json").writeText(it) }
         obj.optString("playlists", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "playlists.json").writeText(it) }
+        obj.optString("playlist_covers", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "playlist_covers.json").writeText(it) }
+        obj.optJSONObject("playlist_cover_files")?.let { co ->
+            val dir = File(c.filesDir, "playlist_covers").apply { mkdirs() }
+            co.keys().forEach { k ->
+                try {
+                    File(dir, k).writeBytes(android.util.Base64.decode(co.getString(k), android.util.Base64.NO_WRAP))
+                } catch (_: Exception) {}
+            }
+        }
         obj.optString("meta", "").takeIf { it.isNotBlank() }?.let { File(c.filesDir, "meta_overrides.json").writeText(it) }
         obj.optJSONObject("fonts")?.let { fo ->
             val dir = File(c.filesDir, "fonts").apply { mkdirs() }

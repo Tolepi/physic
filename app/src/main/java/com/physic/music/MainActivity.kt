@@ -306,7 +306,7 @@ fun PhysicApp() {
     Wrap {
     Box(Modifier.fillMaxSize().background(theme.bg)) {
         if (bgImg.isNotEmpty()) AsyncImage(model = bgImg, contentDescription = null,
-            modifier = Modifier.fillMaxSize().alpha(bgAlphaPct / 100f), contentScale = ContentScale.Fit)
+            modifier = Modifier.fillMaxSize().alpha(bgAlphaPct / 100f), contentScale = ContentScale.Crop)
         ProvideTextStyle(TextStyle(fontFamily = fontFamily).merge(lineHeightTextStyle)) {
             val imageLoader = remember {
                 coil.ImageLoader.Builder(c)
@@ -356,8 +356,8 @@ fun PhysicApp() {
                         1 -> SongsTab(songs, theme, shape)
                         2 -> AlbumsTab(songs, theme, shape)
                         3 -> ArtistsTab(songs, theme, shape)
-                        4 -> StatsTab(theme)
-                        5 -> PlaylistsTab(theme)
+                        4 -> StatsTab(songs, theme)
+                        5 -> PlaylistsTab(theme, shape)
                         6 -> EqualizerTab(theme)
                         7 -> SettingsTab(theme, themeName, rounded, folders) { newTheme, newRounded, newFolders ->
                             scope.launch {
@@ -732,16 +732,20 @@ fun SongsTab(songs: List<Song>, theme: ThemeColors, shape: RoundedCornerShape) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(shownSorted) { s ->
                 val idx = songs.indexOf(s)
-                Row(Modifier.fillMaxWidth().clickable { Playback.play(c, songs, idx) }.padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(coverSize.dp).clip(shape))
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                Row(Modifier.fillMaxWidth().padding(vertical = rowPad.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).clickable { Playback.play(c, songs, idx) }, verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(coverSize.dp).clip(shape))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                        }
+                        Text(formatTime(s.durationMs), color = theme.subtext, fontSize = 11.sp)
                     }
-                    Text(formatTime(s.durationMs), color = theme.subtext, fontSize = 11.sp)
-                    Text(L.tr(LocalContext.current, " +"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { addSong = s }.padding(start = 8.dp))
-                    Text(L.tr(LocalContext.current, " ✎"), color = theme.accent, fontSize = 16.sp, modifier = Modifier.clickable { editSong = s }.padding(start = 8.dp))
+                    Text(L.tr(LocalContext.current, " +"), color = theme.accent, fontSize = 16.sp,
+                        modifier = Modifier.clickable { addSong = s }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
+                    Text(L.tr(LocalContext.current, " ✎"), color = theme.accent, fontSize = 16.sp,
+                        modifier = Modifier.clickable { editSong = s }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
                 }
             }
         }
@@ -981,7 +985,7 @@ fun DetailView(theme: ThemeColors, title: String, subtitle: String, coverModel: 
 }
 
 @Composable
-fun StatsTab(theme: ThemeColors) {
+fun StatsTab(songs: List<Song>, theme: ThemeColors) {
     val c = LocalContext.current
     var top by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
     var albums by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
@@ -989,6 +993,12 @@ fun StatsTab(theme: ThemeColors) {
     var importText by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(false) }
     var topArtists by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
+    val byPath = remember(songs) { songs.associateBy { it.path } }
+    fun songLabel(path: String): String {
+        val song = byPath[path]
+        return if (song != null) "${song.title} · ${song.artist}"
+        else path.substringAfterLast('/').substringBeforeLast('.')
+    }
     LaunchedEffect(Unit) {
         top = Stats.topSongs(c)
         albums = Stats.topAlbums(c)
@@ -1000,15 +1010,15 @@ fun StatsTab(theme: ThemeColors) {
     if (fullView != null) BackHandler { fullView = null }
 
     when (fullView) {
-        "songs" -> FullListView("most played songs", top.map { it.first.substringAfterLast('/') to it.second }, theme) { fullView = null }
+        "songs" -> FullListView("most played songs", top.map { songLabel(it.first) to it.second }, theme) { fullView = null }
         "albums" -> FullListView("top albums", albums, theme) { fullView = null }
         "artists" -> FullListView("top artists", topArtists, theme) { fullView = null }
         else -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Panel("total plays: $total", theme, shape = RoundedCornerShape(0.dp)) {
-                if (top.isNotEmpty()) Text("top: ${top.first().first.substringAfterLast('/')}", color = theme.text, fontSize = 13.sp)
+                if (top.isNotEmpty()) Text("top: ${songLabel(top.first().first)}", color = theme.text, fontSize = 13.sp)
                 else Text("nothing yet — play something!", color = theme.subtext, fontSize = 12.sp)
             }
-            StatCard("most played songs", top.take(5).map { it.first.substringAfterLast('/') to it.second }, theme) { fullView = "songs" }
+            StatCard("most played songs", top.take(5).map { songLabel(it.first) to it.second }, theme) { fullView = "songs" }
             StatCard("top albums", albums.take(5), theme) { fullView = "albums" }
             StatCard("top artists", topArtists.take(5), theme) { fullView = "artists" }
             Text(L.tr(LocalContext.current, "[import stats json]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
@@ -1428,7 +1438,7 @@ fun SettingsTab(
 }
 
 @Composable
-fun PlaylistsTab(theme: ThemeColors) {
+fun PlaylistsTab(theme: ThemeColors, shape: RoundedCornerShape) {
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     var names by remember { mutableStateOf(Playlists.names(c)) }
@@ -1438,32 +1448,62 @@ fun PlaylistsTab(theme: ThemeColors) {
     var exportText by remember { mutableStateOf<String?>(null) }
     var importText by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(false) }
-    var pickPlaylistTarget by remember { mutableStateOf<Song?>(null) }
+    var coversTick by remember { mutableStateOf(0) }
+    var renameTarget by remember { mutableStateOf<String?>(null) }
+    var coverTarget by remember { mutableStateOf<String?>(null) }
 
-    val refresh = { names = Playlists.names(c) }
+    val refresh = { names = Playlists.names(c); coversTick++ }
+    val covers = remember(names, coversTick) { names.associateWith { Playlists.cover(c, it) } }
+
+    val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = coverTarget
+        if (uri != null && target != null) {
+            scope.launch(Dispatchers.IO) {
+                val saved = Playlists.setCoverFromUri(c, target, uri)
+                withContext(Dispatchers.Main) { if (saved != null) coversTick++ }
+            }
+        }
+        coverTarget = null
+    }
 
     if (openPlaylist != null) BackHandler { openPlaylist = null }
 
     when (val open = openPlaylist) {
         null -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Panel("your playlists", theme, shape = RoundedCornerShape(0.dp)) {
-                if (names.isEmpty()) Text(L.tr(LocalContext.current, "no playlists yet — make one!"), color = theme.subtext, fontSize = 13.sp)
+            Panel(L.tr(c, "your playlists"), theme, shape = RoundedCornerShape(0.dp)) {
+                if (names.isEmpty()) Text(L.tr(c, "no playlists yet — make one!"), color = theme.subtext, fontSize = 13.sp)
                 names.forEach { name ->
-                    Row(Modifier.fillMaxWidth().clickable { openPlaylist = name }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(name, color = theme.text, modifier = Modifier.weight(1f))
-                        Text(L.tr(LocalContext.current, "[delete]"), color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable { Playlists.delete(c, name); refresh() })
+                    val cover = covers[name].orEmpty()
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f).clickable { openPlaylist = name }, verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(40.dp).clip(shape).background(theme.surface).border(1.dp, theme.border, shape), contentAlignment = Alignment.Center) {
+                                if (cover.isNotEmpty()) AsyncImage(model = File(cover), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                else Text("♪", color = theme.subtext, fontSize = 16.sp)
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(name, color = theme.text, modifier = Modifier.weight(1f))
+                        }
+                        Text("[rename]", color = theme.subtext, fontSize = 12.sp,
+                            modifier = Modifier.clickable { renameTarget = name }.padding(horizontal = 6.dp, vertical = 4.dp))
+                        Text(L.tr(c, "[delete]"), color = theme.subtext, fontSize = 12.sp,
+                            modifier = Modifier.clickable { Playlists.delete(c, name); refresh() }.padding(horizontal = 6.dp, vertical = 4.dp))
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Button(onClick = { showNew = !showNew }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr(LocalContext.current, "[ new playlist ]"), color = theme.bg) }
+                Button(onClick = { showNew = !showNew }, colors = ButtonDefaults.buttonColors(containerColor = theme.accent)) { Text(L.tr(c, "[ new playlist ]"), color = theme.bg) }
                 if (showNew) {
-                    OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text(L.tr(LocalContext.current, "name")) })
-                    Button(onClick = { if (newName.isNotBlank()) { Playlists.create(c, newName); refresh(); newName = ""; showNew = false } }) { Text(L.tr(LocalContext.current, "create")) }
+                    OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text(L.tr(c, "name")) })
+                    Button(onClick = {
+                        val n = newName.trim()
+                        if (n.isNotEmpty() && !names.contains(n)) {
+                            Playlists.create(c, n); refresh(); newName = ""; showNew = false
+                        }
+                    }) { Text(L.tr(c, "create")) }
                 }
             }
             Row {
-                Text(L.tr(LocalContext.current, "[export]"), color = theme.accent, modifier = Modifier.clickable { exportText = Playlists.exportJson(c) }.padding(end = 16.dp))
-                Text(L.tr(LocalContext.current, "[import]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
+                Text(L.tr(c, "[export]"), color = theme.accent, modifier = Modifier.clickable { exportText = Playlists.exportJson(c) }.padding(end = 16.dp))
+                Text(L.tr(c, "[import]"), color = theme.accent, modifier = Modifier.clickable { showImport = !showImport })
             }
             exportText?.let { text ->
                 Panel("export (copy this into a file to share)", theme, shape = RoundedCornerShape(0.dp)) {
@@ -1471,8 +1511,8 @@ fun PlaylistsTab(theme: ThemeColors) {
                 }
             }
             if (showImport) {
-                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr(LocalContext.current, "paste playlist json")) }, modifier = Modifier.fillMaxWidth().height(160.dp))
-                Button(onClick = { Playlists.importJson(c, importText); refresh(); showImport = false }) { Text(L.tr(LocalContext.current, "import")) }
+                OutlinedTextField(value = importText, onValueChange = { importText = it }, label = { Text(L.tr(c, "paste playlist json")) }, modifier = Modifier.fillMaxWidth().height(160.dp))
+                Button(onClick = { Playlists.importJson(c, importText); refresh(); showImport = false }) { Text(L.tr(c, "import")) }
             }
         }
         else -> {
@@ -1481,33 +1521,86 @@ fun PlaylistsTab(theme: ThemeColors) {
             val fullIndex = remember(removeTick) {
                 MusicIndex.songsInFolders(c, emptySet()).associateBy { it.path }
             }
-            val songs = remember(paths, fullIndex) {
-                paths.mapNotNull { p -> fullIndex[p] }
+            val entries = remember(paths, fullIndex) {
+                paths.mapIndexedNotNull { index, path -> fullIndex[path]?.let { index to it } }
             }
+            val songs = remember(entries) { entries.map { it.second } }
+            val cover = remember(open, coversTick) { Playlists.cover(c, open) }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(L.tr(LocalContext.current, "← back"), color = theme.accent, modifier = Modifier.clickable { openPlaylist = null; refresh() }.padding(bottom = 8.dp))
-                Text(open, color = theme.text, fontSize = 18.sp)
+                Text(L.tr(c, "← back"), color = theme.accent, modifier = Modifier.clickable { openPlaylist = null; refresh() }.padding(bottom = 8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(72.dp).clip(shape).background(theme.surface).border(1.dp, theme.border, shape), contentAlignment = Alignment.Center) {
+                        if (cover.isNotEmpty()) AsyncImage(model = File(cover), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        else Text("♪", color = theme.subtext, fontSize = 26.sp)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(open, color = theme.text, fontSize = 18.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("[rename]", color = theme.accent, fontSize = 12.sp,
+                                modifier = Modifier.clickable { renameTarget = open }.padding(vertical = 4.dp))
+                            Text("[change cover]", color = theme.accent, fontSize = 12.sp,
+                                modifier = Modifier.clickable { coverTarget = open; pickCover.launch(arrayOf("image/*")) }.padding(vertical = 4.dp))
+                            if (cover.isNotEmpty()) Text("[remove cover]", color = theme.subtext, fontSize = 12.sp,
+                                modifier = Modifier.clickable { Playlists.removeCover(c, open); coversTick++ }.padding(vertical = 4.dp))
+                        }
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
-                if (songs.isEmpty()) Text(L.tr(LocalContext.current, "empty — add songs from the songs tab (+ icon)"), color = theme.subtext, fontSize = 12.sp)
-                songs.forEachIndexed { i, s ->
+                if (songs.isEmpty()) Text(L.tr(c, "empty — add songs from the songs tab (+ icon)"), color = theme.subtext, fontSize = 12.sp)
+                entries.forEachIndexed { row, (pathIndex, s) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f).clickable { Playback.play(c, songs, i) }) {
-                            Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                        Row(Modifier.weight(1f).clickable { Playback.play(c, songs, row) }, verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(model = albumArtUri(s), contentDescription = null, modifier = Modifier.size(40.dp).clip(shape))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(s.title, color = theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${s.artist} · ${s.album}", color = theme.subtext, fontSize = 11.sp, maxLines = 1)
+                            }
                         }
                         Text("▲", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable {
-                            if (i > 0) { Playlists.move(c, open, i, i - 1); removeTick++ }
-                        }.padding(horizontal = 6.dp))
+                            val target = entries.getOrNull(row - 1)?.first
+                            if (target != null) { Playlists.move(c, open, pathIndex, target); removeTick++ }
+                        }.padding(horizontal = 8.dp, vertical = 6.dp))
                         Text("▼", color = theme.subtext, fontSize = 12.sp, modifier = Modifier.clickable {
-                            if (i < songs.lastIndex) { Playlists.move(c, open, i, i + 1); removeTick++ }
-                        }.padding(horizontal = 6.dp))
-                        Text("[x]", color = theme.subtext, modifier = Modifier.clickable { Playlists.remove(c, open, i); removeTick++ }.padding(start = 6.dp))
+                            val target = entries.getOrNull(row + 1)?.first
+                            if (target != null) { Playlists.move(c, open, pathIndex, target); removeTick++ }
+                        }.padding(horizontal = 8.dp, vertical = 6.dp))
+                        Text("[x]", color = theme.subtext, modifier = Modifier.clickable { Playlists.remove(c, open, pathIndex); removeTick++ }.padding(start = 6.dp, top = 6.dp, bottom = 6.dp))
                     }
                 }
             }
         }
+    }
+
+    renameTarget?.let { old ->
+        var renameText by remember(old) { mutableStateOf(old) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("rename playlist") },
+            text = {
+                Column {
+                    OutlinedTextField(value = renameText, onValueChange = { renameText = it }, label = { Text(L.tr(c, "name")) })
+                    val trimmed = renameText.trim()
+                    if (trimmed.isNotEmpty() && trimmed != old && names.contains(trimmed)) {
+                        Text("name already exists", color = theme.subtext, fontSize = 11.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val new = renameText.trim()
+                    if (new.isNotEmpty() && (new == old || !names.contains(new))) {
+                        if (Playlists.rename(c, old, new)) {
+                            if (openPlaylist == old) openPlaylist = new
+                            refresh()
+                        }
+                        renameTarget = null
+                    }
+                }) { Text(L.tr(c, "ok")) }
+            },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("cancel") } }
+        )
     }
 }
 
